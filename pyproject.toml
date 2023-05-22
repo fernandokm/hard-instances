@@ -1,0 +1,29 @@
+[tool.ruff]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "A",
+    "C4",
+    "EM",
+    "EXE",
+    "INP",
+    "PIE",
+    "TCH",
+    "NPY",
+    "RUF",
+    "PD003",
+    "PD004",
+    "PD007",
+    "PD008",
+    "PD009",
+    "PD010",
+    "PD012",
+    "PD013",
+    "PD015",
+]
+
+target-version = "py311"
