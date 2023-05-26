@@ -25,8 +25,10 @@ class SCIP(Solver):
                 out.write(f"{v} ")
             out.write("0\n")
 
-    @staticmethod
-    def _convert_to_model_sat(clauses: np.ndarray) -> Model:
+    def solve_instance(
+        self,
+        clauses: np.ndarray,
+    ) -> Result:
         model = Model()
         model.hideOutput()
         with tempfile.NamedTemporaryFile("w+", suffix=".cnf") as f:
@@ -34,40 +36,6 @@ class SCIP(Solver):
             f.flush()
             model.readProblem(f.name)
 
-        return model
-
-    @staticmethod
-    def _convert_to_model_lp(clauses: np.ndarray) -> Model:
-        num_clauses, num_vars = clauses.shape
-
-        model = Model()
-        model.hideOutput()
-        x = [model.addVar(f"x{var_idx}", "B") for var_idx in range(num_vars)]
-
-        clause_literals = [[] for _ in range(num_clauses)]
-        for clause_idx, var_idx in zip(*clauses.nonzero()):  # type: ignore
-            if clauses[clause_idx, var_idx] > 0:
-                lit = x[var_idx]
-            else:
-                lit = 1 - x[var_idx]
-            clause_literals[clause_idx].append(lit)
-
-        for literals in clause_literals:
-            if literals:
-                model.addCons(quicksum(literals) >= 1)
-
-        return model
-
-    def solve_instance(
-        self,
-        clauses: np.ndarray,
-        pure_sat: bool = True,
-    ) -> Result:
-        if pure_sat:
-            model = self._convert_to_model_sat(clauses)
-            model.setEmphasis(SCIP_PARAMEMPHASIS.CPSOLVER)
-        else:
-            model = self._convert_to_model_lp(clauses)
         model.optimize()
 
         return Result(
