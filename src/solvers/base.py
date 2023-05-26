@@ -1,5 +1,14 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class Solver(ABC):
-    pass
+    @abstractmethod
+    def solve_instance(
+        self,
+        instance: "np.ndarray",
+    ) -> dict[str, Any]:
+        pass
