@@ -1,18 +1,21 @@
 import tempfile
-from typing import NotRequired, TextIO, TypedDict
+from typing import TextIO, TypedDict
 
 import numpy as np
 from pyscipopt import Model
 from solvers.base import Solver
 
 
-class Result(TypedDict):
+class _ResultNonTotal(TypedDict, total=False):
+    model: Model
+
+
+class Result(_ResultNonTotal, total=True):
     feasible: bool
     runtime: float
     num_nodes: int
     num_total_nodes: int
     num_leaves: int
-    model: NotRequired[Model]
 
 
 class SCIP(Solver):
