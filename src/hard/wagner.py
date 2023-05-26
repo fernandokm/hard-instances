@@ -1,14 +1,13 @@
-from collections.abc import Callable
+from typing import Any, Literal, overload
 
 import numpy as np
 import torch
+from solvers.base import Solver
 from torch import nn
-from torch.distributions import Bernoulli
+from torch.distributions import Categorical
 from torch.nn import functional as F
 from torch.optim import AdamW
-from tqdm.auto import tqdm, trange
-
-from solvers.base import Solver
+from tqdm.auto import trange
 
 
 class Wagner:
@@ -17,6 +16,7 @@ class Wagner:
     def __init__(
         self,
         instance_shape: tuple[int, ...],
+        instance_values: list[int] | int = 2,
         instances_per_epoch: int = 1000,
         frac_train: float = 0.93,
         frac_survival: float = 0.94,
@@ -35,30 +35,66 @@ class Wagner:
         self.memory = []
         self.scores_per_generation = []
 
+        if isinstance(instance_values, int):
+            self.instance_values_dim = instance_values
+            self.instance_values = None
+        else:
+            self.instance_values_dim = len(instance_values)
+            self.instance_values = torch.as_tensor(instance_values).to(self.device)
+
         self.instance_size_flat = 1
         for dim in self.instance_shape:
             self.instance_size_flat *= dim
 
         self.reset()
 
-    def generate(self, n: int = 1) -> torch.Tensor:
+    def generate(self, n: int = 1, transform_values: bool = True) -> torch.Tensor:
         obs = torch.zeros((n, self.instance_size_flat * 2)).to(self.device)
+        instances = []
         with torch.no_grad():
             for i in range(self.instance_size_flat):
                 obs[:, self.instance_size_flat + i] = 1
                 logits = self.net(obs)
                 obs[:, self.instance_size_flat + i] = 0
 
-                dist = Bernoulli(logits=logits.view(-1))
-                obs[:, i] = dist.sample()
+                dist = Categorical(logits=logits.view(n, -1))
+                sampled = dist.sample()
+                if transform_values and self.instance_values is not None:
+                    sampled = self.instance_values[sampled]
+                instances.append(sampled)
 
-        return obs[:, : self.instance_size_flat].view((-1, *self.instance_shape))
+        return torch.cat(instances).view((n, *self.instance_shape))
+
+    @overload
+    def train(
+        self,
+        solver: Solver,
+        metric: str,
+        *,
+        return_results: Literal[True] = True,
+        generations: int | None = None,
+        instances_per_generation: int | None = None
+    ) -> list[dict[str, Any]]:
+        pass
+
+    @overload
+    def train(
+        self,
+        solver: Solver,
+        metric: str,
+        *,
+        return_results: Literal[False] = False,
+        generations: int | None = None,
+        instances_per_generation: int | None = None
+    ) -> None:
+        pass
 
     def train(
         self,
         solver: Solver,
         metric: str,
         *,
+        return_results: bool = False,
         generations: int | None = None,
         instances_per_generation: int | None = None
     ):
@@ -66,16 +102,22 @@ class Wagner:
             generations = self.epochs
         if instances_per_generation is None:
             instances_per_generation = self.instances_per_epoch
+        results = [] if return_results else None
 
         it = trange(generations, desc="Generations")
         for _ in it:
-            pop = self.generate(instances_per_generation)
-            scores = torch.as_tensor(
-                [
-                    solver.solve_instance(pop[i].cpu().numpy())[metric]
-                    for i in range(instances_per_generation)
-                ]
-            )
+            pop = self.generate(instances_per_generation, transform_values=False)
+            scores_list = []
+            for i in range(instances_per_generation):
+                inst = pop[i]
+                if self.instance_values is not None:
+                    inst = self.instance_values[inst.to(torch.int32)]
+                res = solver.solve_instance(inst.cpu().numpy())
+                scores_list.append(res[metric])
+                if results is not None:
+                    results.append(res)
+
+            scores = torch.as_tensor(scores_list)
             self.scores_per_generation.append(scores)
             self.train_on_generation(pop, scores)
             scores = [x[1] for x in self.memory]
@@ -84,6 +126,8 @@ class Wagner:
                 moving_avg_score=np.mean(scores),
                 pop_size=len(scores),
             )
+
+        return results
 
     def train_on_generation(
         self, new_instances: torch.Tensor, new_scores: torch.Tensor
@@ -118,7 +162,7 @@ class Wagner:
             preds = self.net(states)
             target = population[:, i]
 
-            loss = F.binary_cross_entropy_with_logits(preds.view(-1), target)
+            loss = F.cross_entropy(preds, target)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -132,7 +176,7 @@ class Wagner:
             nn.ReLU(),
             nn.Linear(64, 4),
             nn.ReLU(),
-            nn.Linear(4, 1),
+            nn.Linear(4, self.instance_values_dim),
         ).to(self.device)
 
         self.optimizer = AdamW(self.net.parameters(), lr=self.lr)
