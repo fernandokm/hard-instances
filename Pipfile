@@ -9,7 +9,11 @@ matplotlib = "*"
 cython = "*"
 tqdm = "*"
 scipy = "*"
-pyscipopt = {path = "./PySCIPOpt"}
+pyscipopt = "*"
+numba = "*"
+pysat = "*"
+torch = "*"
+seaborn = "*"
 
 [dev-packages]
 ipykernel = "*"
