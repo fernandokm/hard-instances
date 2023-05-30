@@ -10,7 +10,7 @@ from solvers.base import Solver
 class Result(TypedDict):
     feasible: bool
     wallclock_time: float
-    cpu_time: float
+    time_cpu: float
     solution: list[bool | None]
     num_backtracks: int
 
@@ -123,7 +123,7 @@ class DPLL(Solver):
         return Result(
             feasible=feasible,
             wallclock_time=now - self._start,
-            cpu_time=now_cpu - self._start_cpu,
+            time_cpu=now_cpu - self._start_cpu,
             solution=[var.assignment for var in variables],
             num_backtracks=self._backtracks,
         )
