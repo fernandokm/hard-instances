@@ -1,4 +1,5 @@
 import tempfile
+import time
 from typing import TextIO, TypedDict
 
 import numpy as np
@@ -12,7 +13,9 @@ class _ResultNonTotal(TypedDict, total=False):
 
 class Result(_ResultNonTotal, total=True):
     feasible: bool
-    runtime: float
+    time_internal: float
+    time_wallclock: float
+    time_cpu: float
     num_nodes: int
     num_total_nodes: int
     num_leaves: int
@@ -36,11 +39,18 @@ class SCIP(Solver):
         model = Model()
         model.hideOutput()
         model.readProblem(path)
+
+        start = time.perf_counter()
+        start_cpu = time.process_time()
         model.optimize()
+        end = time.perf_counter()
+        end_cpu = time.process_time()
 
         res = Result(
             feasible=model.getStatus() == "optimal",
-            runtime=model.getSolvingTime(),
+            time_internal=model.getSolvingTime(),
+            time_wallclock=end - start,
+            time_cpu=end_cpu - start_cpu,
             num_nodes=model.getNNodes(),
             num_total_nodes=model.getNTotalNodes(),
             num_leaves=model.getNLeaves(),
