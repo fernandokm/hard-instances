@@ -49,9 +49,9 @@ class Wagner:
         self.reset()
 
     def generate(self, n: int = 1, transform_values: bool = True) -> torch.Tensor:
-        obs = torch.zeros((n, self.instance_size_flat * 2)).to(self.device)
         instances = []
         with torch.no_grad():
+            obs = torch.zeros((n, self.instance_size_flat * 2)).to(self.device)
             for i in range(self.instance_size_flat):
                 obs[:, self.instance_size_flat + i] = 1
                 logits = self.net(obs)
@@ -151,20 +151,20 @@ class Wagner:
         self.memory = self.memory[:survival_size]
 
     def _fit_crossentropy(self, population: torch.Tensor):
+        states = torch.zeros(
+            (population.shape[0], self.instance_size_flat * 2), device=self.device
+        )
         for i in range(self.instance_size_flat):
-            idxs = torch.arange(self.instance_size_flat).view(1, -1).to(self.device)
-            states = torch.hstack(
-                [
-                    population.where(idxs < i, 0),
-                    (idxs == i).to(torch.float32).repeat(population.shape[0], 1),
-                ]
-            )
+            states[:, self.instance_size_flat + i - 1] = 0
+            states[:, self.instance_size_flat + i] = 1
+            states[:, i] = population[:, i]
+
             preds = self.net(states)
             target = population[:, i]
 
             loss = F.cross_entropy(preds, target)
 
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
             self.optimizer.step()
 
@@ -178,5 +178,7 @@ class Wagner:
             nn.ReLU(),
             nn.Linear(4, self.instance_values_dim),
         ).to(self.device)
+
+        self.net = torch.jit.script(self.net)
 
         self.optimizer = AdamW(self.net.parameters(), lr=self.lr)
