@@ -72,8 +72,9 @@ class Wagner:
         metric: str,
         *,
         return_results: Literal[True] = True,
+        return_instances: bool = True,
         generations: int | None = None,
-        instances_per_generation: int | None = None
+        instances_per_generation: int | None = None,
     ) -> list[dict[str, Any]]:
         pass
 
@@ -84,8 +85,9 @@ class Wagner:
         metric: str,
         *,
         return_results: Literal[False] = False,
+        return_instances: bool = True,
         generations: int | None = None,
-        instances_per_generation: int | None = None
+        instances_per_generation: int | None = None,
     ) -> None:
         pass
 
@@ -95,8 +97,9 @@ class Wagner:
         metric: str,
         *,
         return_results: bool = False,
+        return_instances: bool = True,
         generations: int | None = None,
-        instances_per_generation: int | None = None
+        instances_per_generation: int | None = None,
     ):
         if generations is None:
             generations = self.epochs
@@ -112,19 +115,23 @@ class Wagner:
                 inst = pop[i]
                 if self.instance_values is not None:
                     inst = self.instance_values[inst.to(torch.int32)]
-                res = solver.solve_instance(inst.cpu().numpy())
+                inst_np = inst.cpu().numpy()
+                res = solver.solve_instance(inst_np)
                 scores_list.append(res[metric])
                 if results is not None:
+                    if return_instances:
+                        res["instance"] = inst_np
                     results.append(res)
 
             scores = torch.as_tensor(scores_list)
             self.scores_per_generation.append(scores)
             self.train_on_generation(pop, scores)
-            scores = [x[1] for x in self.memory]
+            all_scores = [x[1] for x in self.memory]
             it.set_postfix(
-                max_score=max(scores),
-                moving_avg_score=np.mean(scores),
-                pop_size=len(scores),
+                avg_iter_score=scores.mean(dtype=torch.float32).cpu().item(),
+                avg_pop_score=np.mean(all_scores),
+                max_pop_score=max(all_scores),
+                pop_size=len(all_scores),
             )
 
         return results
