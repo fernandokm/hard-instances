@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from solvers.base import Solver
 from torch import nn
-from torch.distributions import Categorical
+from torch.distributions import Bernoulli, Categorical
 from torch.nn import functional as F
 from torch.optim import AdamW
 from tqdm.auto import trange
@@ -22,6 +22,7 @@ class Wagner:
         frac_survival: float = 0.06,
         epochs: int = 1000,
         lr: float = 1e-4,
+        activation: Literal["sigmoid", "softmax"] | None = None,
         device: str = "cpu",
     ) -> None:
         self.device = device
@@ -42,6 +43,17 @@ class Wagner:
             self.instance_values_dim = len(instance_values)
             self.instance_values = torch.as_tensor(instance_values).to(self.device)
 
+        if activation == "sigmoid" and self.instance_values_dim > 2:
+            msg = (
+                f"Cannot use activation 'sigmoid' with more than "
+                f"two instance_values: {instance_values}"
+            )
+            raise ValueError(msg)
+        if activation == "softmax" or self.instance_values_dim > 2:
+            self.activation = "softmax"
+        else:
+            self.activation = "sigmoid"
+
         self.instance_size_flat = 1
         for dim in self.instance_shape:
             self.instance_size_flat *= dim
@@ -57,8 +69,11 @@ class Wagner:
                 logits = self.net(obs)
                 obs[:, self.instance_size_flat + i] = 0
 
-                dist = Categorical(logits=logits.view(n, -1))
-                sampled = dist.sample()
+                if self.activation == "sigmoid":
+                    dist = Bernoulli(logits=logits.view(n, -1))
+                else:
+                    dist = Categorical(logits=logits.view(n, -1))
+                sampled = dist.sample().int()
                 if transform_values and self.instance_values is not None:
                     sampled = self.instance_values[sampled]
                 instances.append(sampled)
@@ -143,6 +158,15 @@ class Wagner:
         num_instances = new_instances.shape[0]
         new_instances = new_instances.view(num_instances, -1)
 
+        if not (
+            (0 <= new_instances) & (new_instances < self.instance_values_dim)
+        ).all():
+            msg = (
+                "The new_instances should be untransformed (i.e. their elements should"
+                "be in the range [0, self.instance_values_dim))"
+            )
+            raise ValueError(msg)
+
         for i in range(num_instances):
             self.memory.append((new_instances[i].clone(), new_scores[i].item()))
 
@@ -182,6 +206,8 @@ class Wagner:
         self.optimizer.step()
 
     def reset(self) -> None:
+        out_size = self.instance_values_dim if self.activation == "softmax" else 1
+
         self.net = nn.Sequential(
             nn.Linear(self.instance_size_flat * 2, 128),
             nn.ReLU(),
@@ -189,7 +215,7 @@ class Wagner:
             nn.ReLU(),
             nn.Linear(64, 4),
             nn.ReLU(),
-            nn.Linear(4, self.instance_values_dim),
+            nn.Linear(4, out_size),
         ).to(self.device)
 
         self.net = torch.jit.script(self.net)
