@@ -199,7 +199,11 @@ class Wagner:
             target[start:end] = population[:, i]
 
         preds = self.net(states)
-        loss = F.cross_entropy(preds, target)
+
+        if self.activation == "sigmoid":
+            loss = F.binary_cross_entropy_with_logits(preds, target)
+        else:
+            loss = F.cross_entropy(preds, target)
 
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
