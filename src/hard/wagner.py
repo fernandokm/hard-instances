@@ -18,10 +18,10 @@ class Wagner:
         instance_shape: tuple[int, ...],
         instance_values: list[int] | int = 2,
         instances_per_epoch: int = 1000,
-        frac_train: float = 0.93,
-        frac_survival: float = 0.94,
+        frac_train: float = 0.07,
+        frac_survival: float = 0.06,
         epochs: int = 1000,
-        lr: float = 3e-4,
+        lr: float = 1e-4,
         device: str = "cpu",
     ) -> None:
         self.device = device
@@ -151,22 +151,28 @@ class Wagner:
         self.memory = self.memory[:survival_size]
 
     def _fit_crossentropy(self, population: torch.Tensor):
+        pop_size = population.shape[0]
+        inst_size = self.instance_size_flat
         states = torch.zeros(
-            (population.shape[0], self.instance_size_flat * 2), device=self.device
+            (pop_size * inst_size, 2 * inst_size),
+            device=self.device,
         )
-        for i in range(self.instance_size_flat):
-            states[:, self.instance_size_flat + i - 1] = 0
-            states[:, self.instance_size_flat + i] = 1
-            states[:, i] = population[:, i]
+        target = torch.zeros(
+            pop_size * inst_size, dtype=population.dtype, device=self.device
+        )
+        for i in range(inst_size):
+            start = i * pop_size
+            end = (i + 1) * pop_size
+            states[start:end, inst_size + i] = 1
+            states[start:end, : i + 1] = population[:, : i + 1]
+            target[start:end] = population[:, i]
 
-            preds = self.net(states)
-            target = population[:, i]
+        preds = self.net(states)
+        loss = F.cross_entropy(preds, target)
 
-            loss = F.cross_entropy(preds, target)
-
-            self.optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        self.optimizer.step()
 
     def reset(self) -> None:
         self.net = nn.Sequential(
