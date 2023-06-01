@@ -11,12 +11,15 @@ scipy = "*"
 pyscipopt = "*"
 torch = "*"
 seaborn = "*"
+python-sat = {extras = ["aiger", "approxmc", "pblib"], version = "*"}
+pyarrow = "*"
 
 [dev-packages]
 ipykernel = "*"
 black = "*"
 ruff = "*"
 functiontrace = "*"
+ipywidgets = "*"
 
 [requires]
 python_version = "3.10"
