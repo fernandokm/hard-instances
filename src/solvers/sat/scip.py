@@ -28,6 +28,8 @@ class SCIP(Solver):
         out.write(f"p cnf {num_vars} {num_clauses}\n")
         for i in range(num_clauses):
             (variable_idxs,) = np.nonzero(clauses[i])
+            if len(variable_idxs) == 0:
+                continue
             # Add one because variables are 1-indexed in cnf files
             variables = (variable_idxs + 1) * clauses[i, variable_idxs].astype(np.int32)
             for v in variables:
