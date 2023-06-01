@@ -26,4 +26,4 @@ select = [
     "PD015",
 ]
 
-target-version = "py311"
+target-version = "py310"
