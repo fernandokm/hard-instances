@@ -10,7 +10,7 @@ import numpy as np
 from pyscipopt import Model
 from solvers.base import Solver
 
-from . import convert_to_cnf
+from . import write_cnf
 
 StatsDict = dict[str, int | float]
 StatsTable = dict[str, dict[str, int | float]]
@@ -117,7 +117,7 @@ class SCIP(Solver):
 
     def solve_instance(self, clauses: np.ndarray) -> Result:
         with tempfile.NamedTemporaryFile("w+", suffix=".cnf") as f:
-            convert_to_cnf(clauses, out=f)  # type: ignore
+            write_cnf(clauses, out=f)  # type: ignore
             f.flush()
             return self.solve_from_cnf(f.name)
 
