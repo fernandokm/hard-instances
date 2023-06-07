@@ -41,7 +41,9 @@ class Wagner:
     def generate(self, n: int = 1, transform_values: bool = True) -> torch.Tensor:
         with torch.no_grad():
             obs = torch.zeros((n, self.instance_shape_flat * 2), device=self.device)
-            output = torch.zeros((n, self.instance_shape_flat), dtype=torch.long, device=self.device)
+            output = torch.zeros(
+                (n, self.instance_shape_flat), dtype=torch.long, device=self.device
+            )
             for i in range(self.instance_shape_flat):
                 # Temporarily update the mask for sampling
                 obs[:, self.instance_shape_flat + i] = 1
@@ -163,7 +165,7 @@ class Wagner:
             start = i * pop_size
             end = (i + 1) * pop_size
             states[start:end, inst_size + i] = 1
-            states[start:end, : i + 1] = population[:, : i + 1]
+            states[start:end, :i] = population[:, :i]
             target[start:end] = population[:, i]
 
         preds = self.net(states)
