@@ -27,3 +27,6 @@ select = [
 ]
 
 target-version = "py310"
+
+[tool.ruff.pep8-naming]
+ignore-names = ["F"]
