@@ -2,7 +2,7 @@ from typing import Any, Literal, overload
 
 import numpy as np
 import torch
-from solvers.base import Solver
+from solvers.legacy.base import Solver
 from torch import nn
 from torch.distributions import Bernoulli, Categorical
 from torch.nn import functional as F

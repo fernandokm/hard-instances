@@ -2,7 +2,8 @@ from typing import TypedDict
 
 import numpy as np
 import pysat.solvers
-from solvers.base import Solver
+
+from .base import Solver
 
 
 class Result(TypedDict):

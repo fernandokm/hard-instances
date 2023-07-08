@@ -8,9 +8,9 @@ from typing import TypedDict
 
 import numpy as np
 from pyscipopt import Model
-from solvers.base import Solver
 
 from . import write_cnf
+from .base import Solver
 
 StatsDict = dict[str, int | float]
 StatsTable = dict[str, dict[str, int | float]]
