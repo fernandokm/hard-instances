@@ -1,0 +1,13 @@
+numpy
+matplotlib
+tqdm
+scipy
+pyscipopt
+torch
+seaborn
+python-sat[aiger,approxmc,pblib]
+pyarrow
+torch-geometric
+gymnasium
+networkx
+tensorboard

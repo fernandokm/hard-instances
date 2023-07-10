@@ -13,6 +13,10 @@ torch = "*"
 seaborn = "*"
 python-sat = {extras = ["aiger", "approxmc", "pblib"], version = "*"}
 pyarrow = "*"
+torch-geometric = "*"
+gymnasium = "*"
+networkx = "*"
+tensorboard = "*"
 
 [dev-packages]
 ipykernel = "*"

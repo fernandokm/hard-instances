@@ -1,0 +1,5 @@
+ipykernel
+black
+ruff
+functiontrace
+ipywidgets
