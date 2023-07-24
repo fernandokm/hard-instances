@@ -164,19 +164,14 @@ class CsvLogger(Logger):
         self.out_episode = self.AutoDictWriter(self.out_episode_raw)
 
         self._steps = []
-        self._num_steps = 0
-        self._num_steps_global = 0
         self._num_episodes = 0
 
     def step(self, info: dict) -> None:
         info = _flatten_dict(info, normalize_types=True)
-        info["step"] = self._num_steps
+        info["step"] = len(self._steps)
         info["episode"] = self._num_episodes
 
         self._steps.append(info)
-
-        self._num_steps += 1
-        self._num_steps_global += 1
 
     def end_episode(self, info: dict) -> None:
         info = _flatten_dict(info, normalize_types=True)
