@@ -1,14 +1,16 @@
+import time
+from typing import Literal
+
 import numpy as np
 import numpy.typing as npt
 import torch
+from generation import logging
 from gymnasium.spaces import GraphInstance
 from torch import nn
 from torch.distributions import Categorical
 from torch.optim import Optimizer
-from torch.utils.tensorboard.writer import SummaryWriter
-from tqdm.auto import trange
 
-from .envs import G2SATEnv
+from .envs import G2SATEnv, G2SATObservation
 from .graph import SATGraph
 
 
@@ -58,70 +60,92 @@ class G2SATPolicy:
         logits = torch.sum(embeddings[pairs[:, 0]] * embeddings[pairs[:, 1]], dim=-1)
         return logits
 
+    def sample_action(
+        self,
+        obs: G2SATObservation,
+        action_mode: Literal["sample", "argmax"] = "argmax",
+    ) -> tuple[tuple[int, int], torch.Tensor]:
+        logits = self.predict_logits(
+            obs["graph"],
+            torch.as_tensor(obs["valid_actions"], device=self.device),
+        )
+
+        if action_mode == "sample":
+            dist = Categorical(logits=logits)
+            action_idx = dist.sample()
+
+            # Approximate the probability of choosing this pair
+            # as the probability that the pair was in the samples
+            # and the pair was chosen from the samples
+            sample_size = len(obs["valid_actions"])
+            total_pairs = obs["total_valid_actions"]
+            if sample_size == total_pairs:
+                log_prob_pair_proposed = 0  # log(1)
+            else:
+                log_prob_pair_proposed = np.log(sample_size) - np.log(total_pairs)
+            log_prob_pair_chosen = dist.log_prob(action_idx)
+            log_prob = log_prob_pair_proposed + log_prob_pair_chosen
+        else:
+            action_idx = torch.argmax(logits)
+
+            # This is the log probability of the original model, in which
+            # pairs are proposed sequentially
+            log_prob_pair_proposed = -np.log(obs["total_valid_actions"])
+            log_prob_pair_chosen = nn.functional.logsigmoid(logits[action_idx])
+            log_prob = log_prob_pair_proposed + log_prob_pair_chosen
+
+        action = obs["valid_actions"][action_idx]
+
+        return action, log_prob
+
 
 def train_reinforce(
     policy: G2SATPolicy,
     optimizer: Optimizer,
     num_episodes: int = 50_000,
     gamma: float = 0.99,
-    sample_action: bool = False,
-    writer: SummaryWriter | None = None,
+    action_mode: Literal["sample", "argmax"] = "argmax",
+    return_history: bool = False,
+    loggers: list[logging.Logger] | None = None,
 ) -> list[dict]:
+    logger, logger_hist = logging.setup_loggers(
+        loggers,
+        num_episodes,
+        return_history,
+        default_tqdm_metrics=["loss", "return/shaped", "return/original"],
+    )
+
     env = policy.env
-    history = []
-    pbar = trange(num_episodes, desc="Training", unit="episodes")
-    for episode in pbar:
+    for _ in range(num_episodes):
         log_probs = []
         rewards = []
-        infos = []
 
-        obs, info = env.reset()
-        done = False
-        while not done:
-            action_logits = policy.predict_logits(
-                obs["graph"],
-                torch.as_tensor(obs["valid_actions"], device=policy.device),
+        obs, episode_info = env.reset()
+
+        terminated = False
+        num_steps = 0
+        while not terminated:
+            t0 = time.monotonic()
+            action, log_prob = policy.sample_action(
+                obs,
+                action_mode,
             )
-            if sample_action:
-                dist = Categorical(logits=action_logits)
-                action_idx = dist.sample()
+            t1 = time.monotonic()
 
-                # Approximate the probability of choosing this pair
-                # as the probability that the pair was in the samples
-                # and the pair was chosen from the samples
-                sample_size = len(obs["valid_actions"])
-                total_pairs = obs["total_valid_actions"]
-                if sample_size == total_pairs:
-                    log_prob_pair_proposed = 0  # log(1)
-                else:
-                    log_prob_pair_proposed = np.log(sample_size) - np.log(total_pairs)
-                log_prob_pair_chosen = dist.log_prob(action_idx)
-                log_prob = log_prob_pair_proposed + log_prob_pair_chosen
-            else:
-                action_idx = torch.argmax(action_logits)
+            obs, reward, terminated, truncated, info = env.step(np.asarray(action))
 
-                # This is the log probability of the original model, in which
-                # pairs are proposed sequentially
-                log_prob_pair_proposed = -np.log(obs["total_valid_actions"])
-                log_prob_pair_chosen = nn.functional.logsigmoid(
-                    action_logits[action_idx]
-                )
-                log_prob = log_prob_pair_proposed + log_prob_pair_chosen
+            info["action"] = action
+            info["reward"] = reward
+            info["log_prob"] = log_prob.item()
+            info["timing"]["predict"] = t1 - t0
+
+            logger.step(info)
             log_probs.append(log_prob)
-
-            action = obs["valid_actions"][action_idx]
-
-            obs, reward, done, terminated, info = env.step(np.asarray(action))
-            infos.append(info)
             rewards.append(reward)
+            num_steps += 1
 
         losses = []
-        returns = []
-        ret = 0
-        for r in rewards[::-1]:
-            ret = r + gamma * ret
-            returns.append(ret)
-        returns = torch.tensor(returns[::-1], device=policy.device)
+        returns = compute_returns(rewards, gamma, device=policy.device)
         for log_prob, ret in zip(log_probs, returns):
             losses.append(-log_prob.view(1) * ret)
 
@@ -130,23 +154,24 @@ def train_reinforce(
         loss.backward()
         optimizer.step()
 
-        history.append(
-            {
-                "infos": infos,
-                "rewards": rewards,
-                "log_probs": [p.item() for p in log_probs],
-                "loss": loss.item(),
-            }
-        )
+        episode_info |= {
+            "loss": loss.item(),
+            "return/shaped": returns[0],
+            "return/original": rewards[-1] * gamma ** (num_steps - 1),
+        }
+        logger.end_episode(episode_info)
 
-        if writer:
-            writer.add_scalar("episode_loss", loss, global_step=episode)
-            writer.add_scalar("return/shaped", returns[0], global_step=episode)
-            writer.add_scalar("return/original", rewards[-1], global_step=episode)
-            for k, v in infos[-1].items():
-                writer.add_scalar("episode_info/" + k, v, global_step=episode)
-        pbar.set_postfix(
-            loss=loss.item(), return_shaped=returns[0], return_original=rewards[-1]
-        )
+    if logger_hist is not None:
+        return logger_hist.history
+    return []
 
-    return history
+
+def compute_returns(
+    rewards: list[float], gamma: float, device: torch.device | None = None
+):
+    returns_rev = []
+    ret = 0
+    for r in rewards[::-1]:
+        ret = r + gamma * ret
+        returns_rev.append(ret)
+    return returns_rev[::-1]
