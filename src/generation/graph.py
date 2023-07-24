@@ -1,9 +1,13 @@
 import itertools
+from collections.abc import Iterator
+from typing import Literal
 
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
 from gymnasium.spaces import GraphInstance
+
+SamplingMethod = Literal["g2sat", "uniform"]
 
 
 class SATGraph:
@@ -13,12 +17,16 @@ class SATGraph:
         node_type: npt.NDArray[np.int64],  # N
         edge_index: npt.NDArray[np.int64],  # 2 x E
         node_degree: npt.NDArray[np.int64],  # N
+        sampling_method: SamplingMethod = "g2sat",
+        allow_overlaps: bool = False,
         random_state: int | None = None,
     ) -> None:
         self.num_vars = num_vars
         self.node_type = node_type
         self.edge_index = edge_index
         self.node_degree = node_degree
+        self.sampling_method = sampling_method
+        self.allow_overlaps = allow_overlaps
         self.rng = np.random.default_rng(random_state)
 
         self.clause_vars = []
@@ -38,21 +46,45 @@ class SATGraph:
         return self.node_degree[self.num_vars * 2 :]
 
     def is_3sat(self) -> bool:
-        return (self.clause_degree == 3).all()
+        return bool((self.clause_degree == 3).all())
 
     def get_valid_merges(self) -> list[tuple[int, int]]:
         valid_pairs = []
-        ii_cross, jj_cross, ii_intra = self._valid_sat3_pairs()
-        pairs_iter = itertools.chain(
-            itertools.product(ii_cross, jj_cross),
-            itertools.combinations(ii_intra, r=2),
-        )
-        for i, j in pairs_iter:
-            if i != j and not self.have_overlapping_vars(i, j):
+        for i, j in self._unfiltered_sat3_pairs():
+            if i == j:
+                continue
+            if self.allow_overlaps or not self.have_overlapping_vars(i, j):
                 if i > j:
                     i, j = j, i
                 valid_pairs.append((i, j))
         return valid_pairs
+
+    def _unfiltered_sat3_pairs(self) -> Iterator[tuple[int, int]]:
+        ii_cross, jj_cross, ii_intra = self._valid_sat3_pairs()
+        if self.sampling_method == "uniform":
+            return itertools.chain(
+                itertools.product(ii_cross, jj_cross),
+                itertools.combinations(ii_intra, r=2),
+            )
+
+        min_degree = np.min(self.clause_degree)
+        min_clauses = (
+            np.argwhere(self.clause_degree == min_degree).ravel() + self.num_vars * 2
+        )
+        first = self.rng.choice(min_clauses)
+
+        ii_cross, jj_cross, ii_intra = self._valid_sat3_pairs()
+        seconds = []
+        if first in ii_cross:
+            seconds.append(jj_cross)
+        if first in jj_cross:
+            seconds.append(ii_cross)
+        if first in ii_intra:
+            seconds.append(ii_intra)
+
+        return (
+            (first, second) for seconds_inner in seconds for second in seconds_inner
+        )
 
     def count_valid_merges(self) -> int:
         ii_cross, jj_cross, ii_intra = self._valid_sat3_pairs()
@@ -60,46 +92,18 @@ class SATGraph:
         len_intra = len(ii_intra) * (len(ii_intra) - 1) // 2
         return len_cross + len_intra
 
-    def sample_valid_merges(self, k: int) -> list[tuple[int, int]]:
+    def sample_valid_merges_with_count(
+        self, k: int
+    ) -> tuple[list[tuple[int, int]], int]:
         valid_pairs = self.get_valid_merges()
         if len(valid_pairs) <= k:
-            return valid_pairs
+            return valid_pairs, len(valid_pairs)
         idxs = self.rng.choice(len(valid_pairs), size=k, replace=False)
-        return [valid_pairs[i] for i in idxs]
+        sample = [valid_pairs[i] for i in idxs]
+        return sample, len(valid_pairs)
 
-    def sample_valid_merges_fast(self, k: int) -> list[tuple[int, int]]:
-        # TODO: benchmark this and check in which situations it's actually faster
-        ii_cross, jj_cross, ii_intra = self._valid_sat3_pairs()
-        len_cross = len(ii_cross) * len(jj_cross)
-        len_intra = len(ii_intra) * (len(ii_intra) - 1) // 2
-
-        if len_cross + len_intra <= k:
-            return self.get_valid_merges()
-
-        valid_pairs = []
-        idxs = np.arange(len_cross + len_intra, dtype=np.int32)
-        self.rng.shuffle(idxs)
-        for idx in idxs:
-            if idx < len_cross:
-                i = ii_cross[idx // len(ii_cross)]
-                j = jj_cross[idx % len(jj_cross)]
-            else:
-                i = idx - len_cross
-                j = 0
-                for j in range(1, len(ii_cross)):
-                    if i < j:
-                        break
-                    i -= j
-                assert i < j
-                i = ii_intra[i]
-                j = ii_intra[j]
-            if i != j and not self.have_overlapping_vars(i, j):
-                if i > j:
-                    i, j = j, i
-                valid_pairs.append((i, j))
-                if len(valid_pairs) >= k:
-                    break
-        return valid_pairs
+    def sample_valid_merges(self, k: int) -> list[tuple[int, int]]:
+        return self.sample_valid_merges_with_count(k)[0]
 
     def _valid_sat3_pairs(
         self,
@@ -132,20 +136,32 @@ class SATGraph:
 
     def merge(self, i: int, j: int) -> None:
         assert i != j and self.node_type[i] == 2 and self.node_type[j] == 2
-        if self.node_degree[i] + self.node_degree[j] > 3:
+
+        # Deterministic choice of which node is removed (j)
+        # and which node is updated (i)
+        if j < i:
+            i, j = j, i
+
+        deg_i = self.node_degree[i]
+        deg_j = self.node_degree[j]
+        if deg_i + deg_j > 3:
             print(
                 f"Warning: action ({i}, {j}) creates a clause with more than 3 literals"
+                f" (original nodes had degrees {deg_i} and {deg_j})"
             )
 
         vars_i = self.clause_vars[i - 2 * self.num_vars]
         vars_j = self.clause_vars[j - 2 * self.num_vars]
-        expected_new_vars = len(vars_i) + len(vars_j)
         vars_i.update(vars_j)
         self.clause_vars.pop(j - 2 * self.num_vars)
-        if len(vars_i) != expected_new_vars:
-            print(
-                f"Warning: action ({i}, {j}) creates a clause with repeated variables"
-            )
+
+        # Remove duplicate literals
+        literals_i = self.edge_index[(self.edge_index == i)[::-1]]
+        literals_j = self.edge_index[(self.edge_index == j)[::-1]]
+        duplicates = list(set(literals_i) & set(literals_j))
+        duplicate_mask = (self.edge_index == j) | np.isin(self.edge_index, duplicates)
+        duplicate_literal_idxs = np.argwhere(duplicate_mask.all(axis=0)).flatten()
+        self.edge_index = np.delete(self.edge_index, duplicate_literal_idxs, axis=1)
 
         self.edge_index[self.edge_index == j] = i
         self.edge_index[self.edge_index > j] -= 1
@@ -245,7 +261,7 @@ class SATGraph:
         return f"SATGraph({node_type=}, {edge_index=}, {node_degree=})"
 
     @staticmethod
-    def from_template(template: npt.NDArray[np.int64]) -> "SATGraph":
+    def from_template(template: npt.NDArray[np.int64], **kwargs) -> "SATGraph":
         num_literals = len(template)
         num_vars = num_literals // 2
         num_clauses = template.sum()
@@ -266,7 +282,7 @@ class SATGraph:
         # node_type == 0 (positive literal), 1 (negative literal) or 2 (clause)
         node_type = np.repeat(np.arange(3), [num_vars, num_vars, num_clauses])
 
-        return SATGraph(num_vars, node_type, edge_index, node_degree)
+        return SATGraph(num_vars, node_type, edge_index, node_degree, **kwargs)
 
     @staticmethod
     def sample_template(

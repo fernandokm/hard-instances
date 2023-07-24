@@ -7,7 +7,7 @@ import numpy.typing as npt
 from gymnasium import spaces
 from solvers.base import Solver
 
-from .graph import SATGraph
+from .graph import SamplingMethod, SATGraph
 
 
 class G2SATObservation(TypedDict):
@@ -27,6 +27,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         compress_observations: bool = True,
         intermediate_rewards: bool = False,
         intermediate_rewards_coeff: float = 0.1,
+        sampling_method: SamplingMethod = "g2sat",
+        allow_overlaps: bool = False,
     ) -> None:
         self.num_vars = num_vars
         self.num_clauses = num_clauses
@@ -36,6 +38,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.compress_observations = compress_observations
         self.intermediate_rewards = intermediate_rewards
         self.intermediate_rewards_coeff = intermediate_rewards_coeff
+        self.sampling_method = sampling_method
+        self.allow_overlaps = allow_overlaps
 
         max_num_nodes = num_vars * 2 + num_clauses * 3
         self.observation_space = spaces.Dict(
@@ -58,16 +62,14 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         t0 = time.monotonic()
         clause1, clause2 = action
 
-        if self.graph.node_type[clause1] != 2 or self.graph.node_type[clause2] != 2:
-            msg = f"Invalid action {action}: one of the merged nodes is not a clause"
-            raise ValueError(msg)
-        if self.graph.have_overlapping_vars(clause1, clause2):
-            msg = f"Invalid action {action}: merged nodes have repeated variables"
+        if tuple(action) not in self.valid_actions:
+            msg = f"Invalid action: {action}"
             raise ValueError(msg)
 
         self.graph.merge(clause1, clause2)
 
         obs, sample_time = self.get_obs()
+        self.valid_actions = obs["valid_actions"]
 
         is_3sat = self.graph.is_3sat()
         terminated = is_3sat or len(obs["valid_actions"]) == 0
@@ -105,8 +107,13 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
                 self.num_vars, self.num_clauses * 3, self.np_random
             )
 
-        self.graph = SATGraph.from_template(template)
+        self.graph = SATGraph.from_template(
+            template,
+            sampling_method=self.sampling_method,
+            allow_overlaps=self.allow_overlaps,
+        )
         obs, sample_time = self.get_obs()
+        self.valid_actions = obs["valid_actions"]
 
         info = {
             "template": template,
@@ -121,10 +128,10 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
     def get_obs(self) -> tuple[G2SATObservation, float]:
         t0 = time.monotonic()
-        valid = self.graph.sample_valid_merges(self.num_sampled_pairs)
+        valid, count = self.graph.sample_valid_merges_with_count(self.num_sampled_pairs)
         t1 = time.monotonic()
         return {
             "graph": self.graph.to_graph_instance(self.compress_observations),
             "valid_actions": valid,
-            "total_valid_actions": self.graph.count_valid_merges(),
+            "total_valid_actions": count,
         }, t1 - t0
