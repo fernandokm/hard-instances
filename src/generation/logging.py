@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 
 import numpy as np
-from torch.utils.tensorboard.writer import SummaryWriter
+from tensorboardX import SummaryWriter
 from tqdm.auto import tqdm
 
 

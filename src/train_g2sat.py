@@ -11,8 +11,8 @@ from generation.generators import G2SATPolicy, logging, train_reinforce
 from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
 from solvers.pysat import PySAT
+from tensorboardX import SummaryWriter
 from torch import optim
-from torch.utils.tensorboard.writer import SummaryWriter
 
 
 class Args(argparse.Namespace):
@@ -63,7 +63,9 @@ def parse_args() -> Args:
     parser.add_argument("--num_sampled_pairs", default=2_000, type=int)
     parser.add_argument("--intermediate_rewards", action="store_true")
     parser.add_argument("--allow_overlaps", action="store_true")
-    parser.add_argument("--sampling_method", choices=["g2sat", "uniform"])
+    parser.add_argument(
+        "--sampling_method", choices=["g2sat", "uniform"], default="g2sat"
+    )
     parser.add_argument("--compress_observations", action="store_true")
 
     parser.set_defaults(gpu=torch.cuda.is_available())
@@ -84,6 +86,7 @@ def main():
     )
 
     print("Logdir:", logdir)
+
     writer = SummaryWriter(str(logdir))
 
     env = G2SATEnv(
