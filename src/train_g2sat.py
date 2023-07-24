@@ -4,11 +4,11 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import torch
 import utils
 from generation.envs import G2SATEnv
 from generation.generators import G2SATPolicy, logging, train_reinforce
+from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
 from solvers.pysat import PySAT
 from torch import optim
@@ -28,6 +28,8 @@ class Args(argparse.Namespace):
     num_episodes: int
     num_sampled_pairs: int
     intermediate_rewards: bool
+    sampling_method: SamplingMethod
+    allow_overlaps: bool
 
 
 def parse_args() -> Args:
@@ -59,6 +61,8 @@ def parse_args() -> Args:
     parser.add_argument("--num_episodes", default=20_000, type=int)
     parser.add_argument("--num_sampled_pairs", default=2_000, type=int)
     parser.add_argument("--intermediate_rewards", action="store_true")
+    parser.add_argument("--allow_overlaps", action="store_true")
+    parser.add_argument("--sampling_method", choices=["g2sat", "uniform"])
 
     parser.set_defaults(gpu=torch.cuda.is_available())
     args = parser.parse_args(namespace=Args())
@@ -88,6 +92,8 @@ def main():
         compress_observations=True,
         num_sampled_pairs=args.num_sampled_pairs,
         intermediate_rewards=args.intermediate_rewards,
+        allow_overlaps=args.allow_overlaps,
+        sampling_method=args.sampling_method,
     )
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
