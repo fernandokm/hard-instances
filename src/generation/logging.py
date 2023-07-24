@@ -1,5 +1,6 @@
 import csv
 import time
+from collections import defaultdict
 
 import numpy as np
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -20,8 +21,7 @@ class Logger:
 class WithTiming(Logger):
     def __init__(self, inner: Logger):
         self.inner = inner
-        self.time = 0
-        self._discarded_time = 0
+        self.time = defaultdict(float)
 
     def set_num_episodes(self, n: int) -> None:
         return self.inner.set_num_episodes(n)
@@ -30,22 +30,24 @@ class WithTiming(Logger):
         t0 = time.monotonic()
         result = fn(info)
         t1 = time.monotonic()
-        self.time += t1 - t0
+        self.time["logger"] += t1 - t0
 
         return result
 
+    def _update_episode_time(self, info: dict):
+        for k, v in info.get("timing", {}).items():
+            self.time[k] += v
+
     def step(self, info: dict) -> None:
+        self._update_episode_time(info)
         return self._with_time(self.inner.step, info)
 
     def end_episode(self, info: dict) -> None:
-        info.setdefault("timing", {})["logger"] = self.time
-        self._discarded_time += self.time
-        self.time = 0
+        self._update_episode_time(info)
+        info["timing"] = dict(self.time)
+        self.time.clear()
 
         return self._with_time(self.inner.end_episode, info)
-
-    def total_time(self) -> float:
-        return self.time + self._discarded_time
 
 
 class LoggerList(Logger):
@@ -112,14 +114,14 @@ class TensorboardLogger(Logger):
         self._num_episodes = 0
 
     def step(self, info: dict) -> None:
-        self._write_scalars(info, global_step=self._num_steps, suffix="/step")
+        self._write_scalars(info, global_step=self._num_steps, suffix="_step")
         self._last_step_info = info
         self._num_steps += 1
 
     def end_episode(self, info: dict) -> None:
-        self._write_scalars(info, global_step=self._num_episodes)
+        self._write_scalars(info, global_step=self._num_episodes, suffix="_ep")
         self._write_scalars(
-            self._last_step_info, global_step=self._num_episodes, suffix="/episode"
+            self._last_step_info, global_step=self._num_episodes, suffix="_ep"
         )
         self._num_episodes += 1
 
