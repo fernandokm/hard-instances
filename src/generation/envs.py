@@ -1,3 +1,4 @@
+import time
 from typing import Any, TypedDict
 
 import gymnasium as gym
@@ -52,8 +53,9 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
     def step(
         self,
-        action: npt.NDArray[np.integer],
+        action: npt.NDArray[np.integer] | tuple[int, int],
     ) -> tuple[G2SATObservation, float, bool, bool, dict[str, Any]]:
+        t0 = time.monotonic()
         clause1, clause2 = action
 
         if self.graph.node_type[clause1] != 2 or self.graph.node_type[clause2] != 2:
@@ -65,20 +67,30 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
         self.graph.merge(clause1, clause2)
 
-        obs = self.get_obs()
+        obs, sample_time = self.get_obs()
 
         is_3sat = self.graph.is_3sat()
-        if is_3sat or self.intermediate_rewards:
-            info = self.solver.solve_instance(self.graph)
-            reward = info[self.reward_metric]
-            if not is_3sat:
-                reward *= self.intermediate_rewards_coeff
-        else:
-            info = {}
-            reward = 0
-
         terminated = is_3sat or len(obs["valid_actions"]) == 0
         truncated = False
+
+        if terminated or self.intermediate_rewards:
+            metrics = self.solver.solve_instance(self.graph)
+            reward = metrics[self.reward_metric]
+            if not terminated:
+                reward *= self.intermediate_rewards_coeff
+        else:
+            metrics = {}
+            reward = 0
+
+        t1 = time.monotonic()
+        info = {
+            "is_3sat": is_3sat,
+            "metrics": metrics,
+            "timing": {
+                "step": t1 - t0,
+                "sample_pairs": sample_time,
+            },
+        }
 
         return obs, reward, terminated, truncated, info
 
@@ -94,16 +106,25 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
             )
 
         self.graph = SATGraph.from_template(template)
+        obs, sample_time = self.get_obs()
 
-        return self.get_obs(), {}
+        info = {
+            "template": template,
+            "timing": {
+                "sample_pairs": sample_time,
+            },
+        }
+        return obs, info
 
     def render(self) -> None:
         self.graph.plot_nx()
 
-    def get_obs(self) -> G2SATObservation:
+    def get_obs(self) -> tuple[G2SATObservation, float]:
+        t0 = time.monotonic()
+        valid = self.graph.sample_valid_merges(self.num_sampled_pairs)
+        t1 = time.monotonic()
         return {
             "graph": self.graph.to_graph_instance(self.compress_observations),
-            "valid_actions": self.graph.sample_valid_merges(self.num_sampled_pairs),
-            # "valid_actions": self.graph.get_valid_merges(),
+            "valid_actions": valid,
             "total_valid_actions": self.graph.count_valid_merges(),
-        }
+        }, t1 - t0
