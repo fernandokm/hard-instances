@@ -30,6 +30,7 @@ class Args(argparse.Namespace):
     intermediate_rewards: bool
     sampling_method: SamplingMethod
     allow_overlaps: bool
+    compress_observations: bool
 
 
 def parse_args() -> Args:
@@ -63,6 +64,7 @@ def parse_args() -> Args:
     parser.add_argument("--intermediate_rewards", action="store_true")
     parser.add_argument("--allow_overlaps", action="store_true")
     parser.add_argument("--sampling_method", choices=["g2sat", "uniform"])
+    parser.add_argument("--compress_observations", action="store_true")
 
     parser.set_defaults(gpu=torch.cuda.is_available())
     args = parser.parse_args(namespace=Args())
@@ -89,7 +91,7 @@ def main():
         args.num_clauses,
         PySAT("minisat22"),
         "time_cpu",
-        compress_observations=True,
+        compress_observations=args.compress_observations,
         num_sampled_pairs=args.num_sampled_pairs,
         intermediate_rewards=args.intermediate_rewards,
         allow_overlaps=args.allow_overlaps,
