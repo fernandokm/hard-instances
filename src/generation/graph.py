@@ -165,7 +165,7 @@ class SATGraph:
 
         self.edge_index[self.edge_index == j] = i
         self.edge_index[self.edge_index > j] -= 1
-        self.node_degree[i] += self.node_degree[j]
+        self.node_degree[i] += self.node_degree[j] - len(duplicates)
 
         self.node_type = np.delete(self.node_type, j, axis=0)
         self.node_degree = np.delete(self.node_degree, j, axis=0)
