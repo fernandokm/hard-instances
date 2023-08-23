@@ -124,7 +124,7 @@ def main():
 
     print("Logdir:", logdir)
 
-    writer = SummaryWriter(str(logdir))
+    # writer = SummaryWriter(str(logdir))
 
     env = G2SATEnv(
         args.num_vars,
@@ -156,7 +156,7 @@ def main():
         num_episodes=args.num_episodes,
         gamma=args.gamma,
         loggers=[
-            logging.TensorboardLogger(writer),
+            # logging.TensorboardLogger(writer),
             logging.CsvLogger(str(logdir)),
         ],
         action_mode=args.action_mode,
