@@ -17,6 +17,7 @@ torch-geometric = "*"
 gymnasium = "*"
 networkx = "*"
 tensorboard = "*"
+tensorboardx = "*"
 
 [dev-packages]
 ipykernel = "*"

@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import torch
 import utils
@@ -17,6 +18,7 @@ from torch import optim
 
 class Args(argparse.Namespace):
     gpu: bool
+    gpu_device: str
     num_vars: int
     num_clauses: int
     num_layers: int
@@ -31,6 +33,8 @@ class Args(argparse.Namespace):
     sampling_method: SamplingMethod
     allow_overlaps: bool
     compress_observations: bool
+    action_mode: Literal["sample", "argmax"]
+    template_mode: Literal["random", "fixed_random"]
     metric: str
 
 
@@ -42,6 +46,12 @@ def parse_args() -> Args:
         dest="gpu",
         action="store_true",
         help="use gpu (default: True if cuda is found)",
+    )
+    parser.add_argument(
+        "--gpu_device",
+        type=str,
+        default="cuda",
+        help="use the specified device if running with gpu (default: cuda)",
     )
     parser.add_argument(
         "--cpu",
@@ -67,6 +77,10 @@ def parse_args() -> Args:
     parser.add_argument(
         "--sampling_method", choices=["g2sat", "uniform"], default="g2sat"
     )
+    parser.add_argument("--action_mode", choices=["sample", "argmax"], default="argmax")
+    parser.add_argument(
+        "--template_mode", choices=["random", "fixed_random"], default="random"
+    )
     parser.add_argument("--compress_observations", action="store_true")
     parser.add_argument(
         "--metric",
@@ -79,9 +93,26 @@ def parse_args() -> Args:
     return args
 
 
+def create_logdir() -> Path:
+    now = datetime.now().isoformat(timespec="seconds")
+    logdir = Path("runs/SAGE") / now
+    # The following loop ensures that the logdir as new by appending a
+    # suffix to the directory name if it already exists (this is necessary
+    # to prevent experiments executed at the same time from overwriting each other).
+    i = 1
+    while True:
+        try:
+            # we rely on the file system implementation to prevent race conditions
+            logdir.mkdir(parents=True)
+            break
+        except FileExistsError:
+            logdir = logdir.with_name(now + "-" + str(i))
+            i += 1
+    return logdir
+
+
 def main():
-    logdir = Path("runs/SAGE") / datetime.now().isoformat(timespec="seconds")
-    logdir.mkdir(parents=True, exist_ok=True)
+    logdir = create_logdir()
     utils.Tee.save_stdout_stderr(str(logdir / "stdout.txt"))
 
     args = parse_args()
@@ -105,6 +136,7 @@ def main():
         intermediate_rewards=args.intermediate_rewards,
         allow_overlaps=args.allow_overlaps,
         sampling_method=args.sampling_method,
+        template_mode=args.template_mode,
     )
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
@@ -115,7 +147,7 @@ def main():
         num_layers=args.num_layers,
     )
     if args.gpu:
-        model = model.to("cuda")
+        model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model, random_state=42)
 
     train_reinforce(
@@ -127,6 +159,7 @@ def main():
             logging.TensorboardLogger(writer),
             logging.CsvLogger(str(logdir)),
         ],
+        action_mode=args.action_mode,
     )
 
 

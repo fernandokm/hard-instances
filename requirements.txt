@@ -11,3 +11,4 @@ torch-geometric
 gymnasium
 networkx
 tensorboard
+tensorboardx
