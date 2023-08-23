@@ -1,5 +1,5 @@
 import time
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import gymnasium as gym
 import numpy as np
@@ -29,6 +29,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         intermediate_rewards_coeff: float = 0.1,
         sampling_method: SamplingMethod = "g2sat",
         allow_overlaps: bool = False,
+        template_mode: Literal["random", "fixed_random"] = "random",
+        fixed_template_episodes: int | None = None,
     ) -> None:
         self.num_vars = num_vars
         self.num_clauses = num_clauses
@@ -40,6 +42,12 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.intermediate_rewards_coeff = intermediate_rewards_coeff
         self.sampling_method = sampling_method
         self.allow_overlaps = allow_overlaps
+
+        if template_mode == "random":
+            self.fixed_template = None
+        else:
+            self.fixed_template = self._sample_template()
+        self.fixed_template_episodes = fixed_template_episodes
 
         max_num_nodes = num_vars * 2 + num_clauses * 3
         self.observation_space = spaces.Dict(
@@ -96,6 +104,11 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
         return obs, reward, terminated, truncated, info
 
+    def _sample_template(self) -> npt.NDArray[np.int64]:
+        return SATGraph.sample_template(
+            self.num_vars, self.num_clauses * 3, self.np_random
+        )
+
     def reset(
         self,
         template: npt.NDArray[np.int64] | None = None,
@@ -103,9 +116,17 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
     ) -> tuple[G2SATObservation, dict[str, Any]]:
         super().reset(seed=seed)
         if template is None:
-            template = SATGraph.sample_template(
-                self.num_vars, self.num_clauses * 3, self.np_random
-            )
+            if self.fixed_template is None:
+                template = self._sample_template()
+            else:
+                template = self.fixed_template
+                if self.fixed_template_episodes is None:
+                    pass
+                elif self.fixed_template_episodes > 1:
+                    self.fixed_template_episodes -= 1
+                else:
+                    self.fixed_template_episodes = 0
+                    self.fixed_template = None
 
         self.graph = SATGraph.from_template(
             template,

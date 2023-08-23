@@ -35,6 +35,7 @@ class Args(argparse.Namespace):
     compress_observations: bool
     action_mode: Literal["sample", "argmax"]
     template_mode: Literal["random", "fixed_random"]
+    fixed_template_episodes: int
     metric: str
 
 
@@ -81,6 +82,7 @@ def parse_args() -> Args:
     parser.add_argument(
         "--template_mode", choices=["random", "fixed_random"], default="random"
     )
+    parser.add_argument("--fixed_template_episodes", type=int, default=None)
     parser.add_argument("--compress_observations", action="store_true")
     parser.add_argument(
         "--metric",
@@ -137,6 +139,7 @@ def main():
         allow_overlaps=args.allow_overlaps,
         sampling_method=args.sampling_method,
         template_mode=args.template_mode,
+        fixed_template_episodes=args.fixed_template_episodes,
     )
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
