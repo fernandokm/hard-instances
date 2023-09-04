@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, TypedDict
 
 import pysat.solvers
+import pysat.formula
 
 from .base import Solver
 
@@ -21,8 +22,7 @@ class PySAT(Solver):
     def __init__(self, solver_name: str):
         self.solver_name = solver_name
 
-    def make_pysat_solver(self, instance: "SATGraph") -> pysat.solvers.Solver:
-        clauses = instance.to_clauses()
+    def make_pysat_solver(self, clauses: list[list[int]]) -> pysat.solvers.Solver:
         return pysat.solvers.Solver(
             self.solver_name,
             use_timer=True,
@@ -31,9 +31,13 @@ class PySAT(Solver):
 
     def solve_instance(
         self,
-        instance: "SATGraph",
+        instance: "SATGraph | pysat.formula.CNF",
     ) -> Result:
-        with self.make_pysat_solver(instance) as solver:
+        if isinstance(instance, pysat.formula.CNF):
+            clauses = instance.clauses
+        else:
+            clauses = instance.to_clauses()
+        with self.make_pysat_solver(clauses) as solver:
             feasible = solver.solve()
             return Result(
                 feasible=feasible,
