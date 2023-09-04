@@ -162,6 +162,8 @@ def train_reinforce(
         }
         logger.end_episode(episode_info)
 
+    logger.close()
+
     return None
 
 

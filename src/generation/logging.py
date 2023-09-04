@@ -1,13 +1,18 @@
 import csv
+import os
 import time
 from collections import defaultdict
 
 import numpy as np
+import pandas as pd
 from tensorboardX import SummaryWriter
 from tqdm.auto import tqdm
 
 
 class Logger:
+    def __init__(self) -> None:
+        self.__closed = False
+
     def set_num_episodes(self, n: int) -> None:
         pass
 
@@ -15,6 +20,9 @@ class Logger:
         pass
 
     def end_episode(self, info: dict) -> None:
+        pass
+
+    def close(self) -> None:
         pass
 
 
@@ -66,6 +74,10 @@ class LoggerList(Logger):
         for logger in self.loggers:
             logger.end_episode(info)
 
+    def close(self):
+        for logger in self.loggers:
+            logger.close()
+
     def append(self, logger: Logger) -> None:
         self.loggers.append(logger)
 
@@ -98,7 +110,7 @@ class TqdmLogger(Logger):
         self.pbar.set_postfix(self._postfix, refresh=False)
         self.pbar.update()
 
-    def __del__(self):
+    def close(self):
         self.pbar.close()
 
 

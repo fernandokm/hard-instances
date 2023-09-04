@@ -38,6 +38,7 @@ class Args(argparse.Namespace):
     template_file: Path | None
     metric: str
     seed: int
+    tensorboard: bool
 
 
 def parse_args() -> Args:
@@ -88,6 +89,7 @@ def parse_args() -> Args:
         default="time_cpu",
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--tensorboard", action="store_true")
 
     parser.set_defaults(gpu=torch.cuda.is_available())
     args = parser.parse_args(namespace=Args())
@@ -134,7 +136,7 @@ def main():
 
     env = G2SATEnv(
         args.num_vars,
-        args.num_clauses*3,
+        args.num_clauses * 3,
         PySAT("minisat22"),
         args.metric,
         compress_observations=args.compress_observations,
