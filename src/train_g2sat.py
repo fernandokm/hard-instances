@@ -158,7 +158,7 @@ def main():
         model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model)
 
-    loggers: list[logging.Logger] = [logging.CsvLogger(str(logdir))]
+    loggers: list[logging.Logger] = [logging.FileLogger(str(logdir))]
     if args.tensorboard:
         writer = SummaryWriter(str(logdir))
         loggers.append(logging.TensorboardLogger(writer))

@@ -57,6 +57,9 @@ class WithTiming(Logger):
 
         return self._with_time(self.inner.end_episode, info)
 
+    def close(self) -> None:
+        self.inner.close()
+
 
 class LoggerList(Logger):
     def __init__(self, loggers: list[Logger]) -> None:
@@ -144,7 +147,7 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalar(k, v, global_step)
 
 
-class CsvLogger(Logger):
+class FileLogger(Logger):
     class AutoDictWriter:
         def __init__(self, fp):
             self.fp = fp
@@ -164,17 +167,18 @@ class CsvLogger(Logger):
                 if extra_keys:
                     extra_keys_str = ", ".join(extra_keys)
                     print(
-                        "Warning: keys not present in initial iteration will not be saved"
-                        f" ({extra_keys_str})"
+                        "Warning: keys not present in initial iteration will not be "
+                        f"saved ({extra_keys_str})"
                     )
             self.inner.writerows(rowdicts)
 
-    def __init__(self, outdir: str) -> None:
+    def __init__(self, outdir: str, convert_to_parquet: bool = True) -> None:
         self.outdir = outdir
         self.out_step_raw = open(outdir + "/history_step.csv", "w")
         self.out_step = self.AutoDictWriter(self.out_step_raw)
         self.out_episode_raw = open(outdir + "/history_episode.csv", "w")
         self.out_episode = self.AutoDictWriter(self.out_episode_raw)
+        self.convert_to_parquet = convert_to_parquet
 
         self._steps = []
         self._num_episodes = 0
@@ -196,9 +200,21 @@ class CsvLogger(Logger):
         self._steps.clear()
         self._num_episodes += 1
 
-    def __close__(self):
+    @staticmethod
+    def _convert_to_parquet(name: str):
+        path_csv = name + ".csv"
+        path_parquet = name + ".parquet"
+
+        data = pd.read_csv(path_csv)
+        data.to_parquet(path_parquet)
+        os.remove(path_csv)
+
+    def close(self):
         self.out_step_raw.close()
         self.out_episode_raw.close()
+        if self.convert_to_parquet:
+            self._convert_to_parquet(self.outdir + "/history_step")
+            self._convert_to_parquet(self.outdir + "/history_episode")
 
 
 class HistoryLogger(Logger):
