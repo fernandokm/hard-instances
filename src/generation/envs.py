@@ -1,3 +1,4 @@
+import itertools
 import time
 from typing import Any, Literal, TypedDict
 
@@ -6,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from gymnasium import spaces
 from solvers.base import Solver
+from utils import Seed
 
 from .graph import SamplingMethod, SATGraph
 
@@ -29,8 +31,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         intermediate_rewards_coeff: float = 0.1,
         sampling_method: SamplingMethod = "g2sat",
         allow_overlaps: bool = False,
-        template_mode: Literal["random", "fixed_random"] = "random",
-        fixed_template_episodes: int | None = None,
+        fixed_templates: list[npt.NDArray[np.int64]] | None = None,
     ) -> None:
         self.num_vars = num_vars
         self.num_clauses = num_clauses
@@ -43,11 +44,11 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.sampling_method = sampling_method
         self.allow_overlaps = allow_overlaps
 
-        if template_mode == "random":
-            self.fixed_template = None
+        self.fixed_templates = fixed_templates
+        if fixed_templates is None:
+            self.fixed_templates_iter = None
         else:
-            self.fixed_template = self._sample_template()
-        self.fixed_template_episodes = fixed_template_episodes
+            self.fixed_templates_iter = iter(itertools.cycle(fixed_templates))
 
         max_num_nodes = num_vars * 2 + num_clauses * 3
         self.observation_space = spaces.Dict(
@@ -104,34 +105,33 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
         return obs, reward, terminated, truncated, info
 
-    def _sample_template(self) -> npt.NDArray[np.int64]:
-        return SATGraph.sample_template(
-            self.num_vars, self.num_clauses * 3, self.np_random
-        )
-
     def reset(
         self,
         template: npt.NDArray[np.int64] | None = None,
-        seed: int | None = None,
+        seed: Seed = None,
     ) -> tuple[G2SATObservation, dict[str, Any]]:
-        super().reset(seed=seed)
-        if template is None:
-            if self.fixed_template is None:
-                template = self._sample_template()
-            else:
-                template = self.fixed_template
-                if self.fixed_template_episodes is None:
-                    pass
-                elif self.fixed_template_episodes > 1:
-                    self.fixed_template_episodes -= 1
-                else:
-                    self.fixed_template_episodes = 0
-                    self.fixed_template = None
+        rng = np.random.default_rng(seed)
+        if template is not None:
+            # ok, already have template
+            pass
+        elif self.fixed_templates_iter is not None:
+            # get next fixed template
+            template = next(self.fixed_templates_iter)
+        else:
+            # sample a new template
+            import time
+            start = time.monotonic()
+            template = SATGraph.sample_template(
+                self.num_vars, self.num_clauses * 3, seed=rng
+            )
+            end = time.monotonic()
+            print(end - start)
 
         self.graph = SATGraph.from_template(
             template,
             sampling_method=self.sampling_method,
             allow_overlaps=self.allow_overlaps,
+            seed=rng,
         )
         obs, sample_time = self.get_obs()
         self.valid_actions = obs["valid_actions"]

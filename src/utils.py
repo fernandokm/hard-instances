@@ -1,4 +1,13 @@
+import gzip
+import json
 import sys
+from typing import TextIO
+from pathlib import Path
+
+import numpy as np
+import numpy.typing as npt
+
+Seed = int | np.random.Generator | None
 
 
 class Tee:
@@ -19,3 +28,24 @@ class Tee:
         f = open(filename, mode)
         sys.stdout = Tee(sys.stdout, f)
         sys.stderr = Tee(sys.stderr, f)
+
+
+def parse_template(raw_template: str) -> npt.NDArray[np.int64]:
+    return np.asarray(json.loads(raw_template), dtype=np.int64)
+
+
+def _open_and_decompress(file: Path) -> TextIO:
+    if file.suffix.lower() == ".gz":
+        return gzip.open(file, "rt")
+    else:
+        return file.open("r")
+
+
+def parse_template_file(file: Path) -> list[npt.NDArray[np.int64]]:
+    templates = []
+    with _open_and_decompress(file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                templates.append(parse_template(line))
+    return templates

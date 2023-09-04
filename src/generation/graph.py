@@ -1,4 +1,5 @@
 import itertools
+import json
 from collections.abc import Iterator
 from typing import Literal
 
@@ -6,6 +7,7 @@ import networkx as nx
 import numpy as np
 import numpy.typing as npt
 from gymnasium.spaces import GraphInstance
+from utils import Seed
 
 SamplingMethod = Literal["g2sat", "uniform"]
 
@@ -19,7 +21,7 @@ class SATGraph:
         node_degree: npt.NDArray[np.int64],  # N
         sampling_method: SamplingMethod = "g2sat",
         allow_overlaps: bool = False,
-        random_state: int | None = None,
+        seed: Seed = None,
     ) -> None:
         self.num_vars = num_vars
         self.node_type = node_type
@@ -27,7 +29,7 @@ class SATGraph:
         self.node_degree = node_degree
         self.sampling_method = sampling_method
         self.allow_overlaps = allow_overlaps
-        self.rng = np.random.default_rng(random_state)
+        self.rng = np.random.default_rng(seed)
 
         self.clause_vars = []
         for clause in self.to_clauses():
@@ -288,7 +290,7 @@ class SATGraph:
     def sample_template(
         num_vars: int,
         num_clauses: int,
-        rng: np.random.Generator | None = None,
+        seed: Seed = None,
     ) -> npt.NDArray[np.int64]:
         assert num_vars * 2 <= num_clauses
 
@@ -300,8 +302,7 @@ class SATGraph:
         # (2, 5, ... in the example above).
         # We then compute the number of occurrences of each literal
         # (2-0, 5-2, ... in the example above)
-        if rng is None:
-            rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         num_literals = num_vars * 2
         partition_points = 1 + rng.choice(
             num_clauses - 1, size=num_literals - 1, replace=False

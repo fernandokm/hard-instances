@@ -9,16 +9,14 @@ from gymnasium.spaces import GraphInstance
 from torch import nn
 from torch.distributions import Categorical
 from torch.optim import Optimizer
+from utils import Seed
 
 from .envs import G2SATEnv, G2SATObservation
 from .graph import SATGraph
 
 
 class G2SATPolicy:
-    def __init__(
-        self, env: G2SATEnv, model: nn.Module, random_state: int | None = None
-    ) -> None:
-        self.np_random = np.random.default_rng(random_state)
+    def __init__(self, env: G2SATEnv, model: nn.Module) -> None:
         self.env = env
         self.model = model
 
@@ -28,12 +26,11 @@ class G2SATPolicy:
             return param.device
 
     def generate(
-        self,
-        template: npt.NDArray[np.int64] | None = None,
+        self, template: npt.NDArray[np.int64] | None = None, seed: Seed = None
     ) -> SATGraph:
         if template is None:
             template = SATGraph.sample_template(
-                self.env.num_vars, 3 * self.env.num_clauses, self.np_random
+                self.env.num_vars, 3 * self.env.num_clauses, seed=seed
             )
 
         g = SATGraph.from_template(template)
@@ -107,7 +104,9 @@ def train_reinforce(
     action_mode: Literal["sample", "argmax"] = "argmax",
     return_history: bool = False,
     loggers: list[logging.Logger] | None = None,
+    seed: Seed = None,
 ) -> list[dict]:
+    rng = np.random.default_rng(seed)
     logger, logger_hist = logging.setup_loggers(
         loggers,
         num_episodes,
@@ -120,7 +119,11 @@ def train_reinforce(
         log_probs = []
         rewards = []
 
-        obs, episode_info = env.reset()
+        # We spawn a new child rng per episode in order to ensure that
+        # the initial states depend only on the seed (and not on what happened during
+        # the previous episodes). In particular, this ensures that the initial templates
+        # used are the same across all experiments.
+        obs, episode_info = env.reset(seed=rng.spawn(1)[0])
 
         terminated = False
         num_steps = 0

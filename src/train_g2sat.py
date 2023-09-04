@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import torch
+import torch_geometric as tg
 import utils
 from generation.envs import G2SATEnv
 from generation.generators import G2SATPolicy, logging, train_reinforce
@@ -34,9 +35,9 @@ class Args(argparse.Namespace):
     allow_overlaps: bool
     compress_observations: bool
     action_mode: Literal["sample", "argmax"]
-    template_mode: Literal["random", "fixed_random"]
-    fixed_template_episodes: int
+    template_file: Path | None
     metric: str
+    seed: int
 
 
 def parse_args() -> Args:
@@ -79,16 +80,14 @@ def parse_args() -> Args:
         "--sampling_method", choices=["g2sat", "uniform"], default="g2sat"
     )
     parser.add_argument("--action_mode", choices=["sample", "argmax"], default="argmax")
-    parser.add_argument(
-        "--template_mode", choices=["random", "fixed_random"], default="random"
-    )
-    parser.add_argument("--fixed_template_episodes", type=int, default=None)
+    parser.add_argument("--template_file", type=Path, default=None)
     parser.add_argument("--compress_observations", action="store_true")
     parser.add_argument(
         "--metric",
         choices=["time_cpu", "decisions", "conflicts", "restarts", "propagations"],
         default="time_cpu",
     )
+    parser.add_argument("--seed", type=int, default=0)
 
     parser.set_defaults(gpu=torch.cuda.is_available())
     args = parser.parse_args(namespace=Args())
@@ -124,13 +123,20 @@ def main():
         sep="\n  ",
     )
 
+    tg.seed_everything(args.seed)
+
     print("Logdir:", logdir)
+
+    if args.template_file is None:
+        fixed_templates = None
+    else:
+        fixed_templates = utils.parse_template_file(args.template_file)
 
     # writer = SummaryWriter(str(logdir))
 
     env = G2SATEnv(
         args.num_vars,
-        args.num_clauses,
+        args.num_clauses*3,
         PySAT("minisat22"),
         args.metric,
         compress_observations=args.compress_observations,
@@ -138,8 +144,7 @@ def main():
         intermediate_rewards=args.intermediate_rewards,
         allow_overlaps=args.allow_overlaps,
         sampling_method=args.sampling_method,
-        template_mode=args.template_mode,
-        fixed_template_episodes=args.fixed_template_episodes,
+        fixed_templates=fixed_templates,
     )
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
@@ -151,7 +156,7 @@ def main():
     )
     if args.gpu:
         model = model.to(args.gpu_device)
-    policy = G2SATPolicy(env, model, random_state=42)
+    policy = G2SATPolicy(env, model)
 
     train_reinforce(
         policy,
@@ -163,6 +168,7 @@ def main():
             logging.CsvLogger(str(logdir)),
         ],
         action_mode=args.action_mode,
+        seed=args.seed,
     )
 
 
