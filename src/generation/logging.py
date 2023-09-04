@@ -206,17 +206,10 @@ class HistoryLogger(Logger):
 def setup_loggers(
     loggers: list[Logger] | None,
     num_episodes: int,
-    return_history: bool,
     default_tqdm_metrics: list[str],
     with_timing: bool = True,
-) -> tuple[Logger, HistoryLogger | None]:
+) -> Logger:
     logger = LoggerList(loggers or [])
-
-    if return_history:
-        logger_hist = HistoryLogger()
-        logger.append(logger_hist)
-    else:
-        logger_hist = None
 
     if not logger.has_type(TqdmLogger):
         logger.append(TqdmLogger(default_tqdm_metrics))
@@ -225,7 +218,7 @@ def setup_loggers(
 
     if with_timing:
         logger = WithTiming(logger)
-    return logger, logger_hist
+    return logger
 
 
 def _flatten_dict(

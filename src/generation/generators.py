@@ -102,15 +102,13 @@ def train_reinforce(
     num_episodes: int = 50_000,
     gamma: float = 0.99,
     action_mode: Literal["sample", "argmax"] = "argmax",
-    return_history: bool = False,
     loggers: list[logging.Logger] | None = None,
     seed: Seed = None,
-) -> list[dict]:
+) -> None:
     rng = np.random.default_rng(seed)
-    logger, logger_hist = logging.setup_loggers(
+    logger = logging.setup_loggers(
         loggers,
         num_episodes,
-        return_history,
         default_tqdm_metrics=["loss", "return/shaped", "return/original"],
     )
 
@@ -164,9 +162,7 @@ def train_reinforce(
         }
         logger.end_episode(episode_info)
 
-    if logger_hist is not None:
-        return logger_hist.history
-    return []
+    return None
 
 
 def compute_returns(

@@ -132,8 +132,6 @@ def main():
     else:
         fixed_templates = utils.parse_template_file(args.template_file)
 
-    # writer = SummaryWriter(str(logdir))
-
     env = G2SATEnv(
         args.num_vars,
         args.num_clauses*3,
@@ -158,15 +156,17 @@ def main():
         model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model)
 
+    loggers: list[logging.Logger] = [logging.CsvLogger(str(logdir))]
+    if args.tensorboard:
+        writer = SummaryWriter(str(logdir))
+        loggers.append(logging.TensorboardLogger(writer))
+
     train_reinforce(
         policy,
         optimizer=optim.AdamW(model.parameters(), lr=args.lr),
         num_episodes=args.num_episodes,
         gamma=args.gamma,
-        loggers=[
-            # logging.TensorboardLogger(writer),
-            logging.CsvLogger(str(logdir)),
-        ],
+        loggers=loggers,
         action_mode=args.action_mode,
         seed=args.seed,
     )
