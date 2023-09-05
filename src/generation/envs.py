@@ -1,6 +1,7 @@
 import itertools
 import time
-from typing import Any, Literal, TypedDict
+from collections import defaultdict
+from typing import Any, TypedDict
 
 import gymnasium as gym
 import numpy as np
@@ -32,6 +33,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         sampling_method: SamplingMethod = "g2sat",
         allow_overlaps: bool = False,
         fixed_templates: list[npt.NDArray[np.int64]] | None = None,
+        solve_repetitions: int = 1,
+        solve_agg: str = "mean",
     ) -> None:
         self.num_vars = num_vars
         self.num_clauses = num_clauses
@@ -43,6 +46,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.intermediate_rewards_coeff = intermediate_rewards_coeff
         self.sampling_method = sampling_method
         self.allow_overlaps = allow_overlaps
+        self.solve_repetitions = solve_repetitions
+        self.solve_agg = solve_agg
 
         self.fixed_templates = fixed_templates
         if fixed_templates is None:
@@ -85,7 +90,15 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         truncated = False
 
         if terminated or self.intermediate_rewards:
-            metrics = self.solver.solve_instance(self.graph)
+            metrics_raw = defaultdict(list)
+            for _ in range(self.solve_repetitions):
+                for k, v in self.solver.solve_instance(self.graph).items():
+                    metrics_raw[k].append(v)
+            agg_fn = getattr(np, self.solve_agg)
+            metrics = {}
+            for k in list(metrics_raw.keys()):
+                metrics[k] = agg_fn(metrics_raw[k])
+
             reward = metrics[self.reward_metric]
             if not terminated:
                 reward *= self.intermediate_rewards_coeff
@@ -119,13 +132,9 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
             template = next(self.fixed_templates_iter)
         else:
             # sample a new template
-            import time
-            start = time.monotonic()
             template = SATGraph.sample_template(
                 self.num_vars, self.num_clauses * 3, seed=rng
             )
-            end = time.monotonic()
-            print(end - start)
 
         self.graph = SATGraph.from_template(
             template,

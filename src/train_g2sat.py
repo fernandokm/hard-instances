@@ -30,6 +30,8 @@ class Args(argparse.Namespace):
     lr: float
     num_episodes: int
     num_sampled_pairs: int
+    solve_repetitions: int
+    solve_agg: str
     intermediate_rewards: bool
     sampling_method: SamplingMethod
     allow_overlaps: bool
@@ -75,6 +77,10 @@ def parse_args() -> Args:
     parser.add_argument("--lr", dest="lr", default=1e-3, type=float)
     parser.add_argument("--num_episodes", default=20_000, type=int)
     parser.add_argument("--num_sampled_pairs", default=2_000, type=int)
+    parser.add_argument("--solve_repetitions", default=1, type=int)
+    parser.add_argument(
+        "--solve_agg", choices=["mean", "median", "min"], default="median"
+    )
     parser.add_argument("--intermediate_rewards", action="store_true")
     parser.add_argument("--allow_overlaps", action="store_true")
     parser.add_argument(
@@ -145,6 +151,8 @@ def main():
         allow_overlaps=args.allow_overlaps,
         sampling_method=args.sampling_method,
         fixed_templates=fixed_templates,
+        solve_repetitions=args.solve_repetitions,
+        solve_agg=args.solve_agg,
     )
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
