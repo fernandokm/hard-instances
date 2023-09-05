@@ -1,8 +1,8 @@
 import gzip
 import json
 import sys
-from typing import TextIO
 from pathlib import Path
+from typing import TextIO
 
 import numpy as np
 import numpy.typing as npt
