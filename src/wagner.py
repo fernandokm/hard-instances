@@ -258,4 +258,4 @@ class Wagner:
 
         self.net = torch.jit.script(self.net)  # type: ignore
 
-        self.optimizer = AdamW(self.net.parameters(), lr=self.lr)
+        self.optimizer = AdamW(self.net.parameters(), lr=self.lr) # type: ignore

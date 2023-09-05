@@ -1,5 +1,4 @@
 import itertools
-import json
 from collections.abc import Iterator
 from typing import Literal
 

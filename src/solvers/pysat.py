@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, TypedDict
 
-import pysat.solvers
 import pysat.formula
+import pysat.solvers
 
 from .base import Solver
 

@@ -34,7 +34,10 @@ def main():
     args = parse_args()
     rng = np.random.default_rng(args.seed)
 
-    filename = f"{args.num_vars}x{args.num_clauses}x{args.k}_{args.num_templates}_seed{args.seed}.txt.gz"
+    filename = (
+        f"{args.num_vars}x{args.num_clauses}x{args.k}_"
+        f"{args.num_templates}_seed{args.seed}.txt.gz"
+    )
     out_file = args.out_dir / filename
     print("Writing templates to file:", out_file)
 

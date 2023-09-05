@@ -1,7 +1,3 @@
-import sys
-
-sys.path.append('src')
-
 from pathlib import Path
 
 import numpy as np

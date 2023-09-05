@@ -1,4 +1,5 @@
 from typing import TextIO
+
 import numpy as np
 
 
