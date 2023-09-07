@@ -1,12 +1,7 @@
-from typing import TYPE_CHECKING
-
 import pysat.formula
 import pysat.solvers
 
 from .base import Solver
-
-if TYPE_CHECKING:
-    from generation.graph import SATGraph
 
 
 class PySAT(Solver[int | float | bool]):
@@ -22,12 +17,8 @@ class PySAT(Solver[int | float | bool]):
 
     def solve_instance(
         self,
-        instance: "SATGraph | pysat.formula.CNF",
+        clauses: list[list[int]],
     ) -> dict[str, int | float | bool]:
-        if isinstance(instance, pysat.formula.CNF):
-            clauses = instance.clauses
-        else:
-            clauses = instance.to_clauses()
         with self.make_pysat_solver(clauses) as solver:
             feasible = solver.solve()
             return {

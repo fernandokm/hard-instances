@@ -87,7 +87,7 @@ def solve(data: tuple[str, int, int]):
     outdir, instance, run = data
     file = outdir + f"/{instance}.cnf"
     cnf = CNF(from_file=file)
-    metrics = PySAT("minisat22").solve_instance(cnf)
+    metrics = PySAT("minisat22").solve_instance(cnf.clauses)
 
     return {
         "instance": instance,

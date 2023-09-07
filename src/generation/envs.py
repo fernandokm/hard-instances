@@ -91,8 +91,9 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
         if terminated or self.intermediate_rewards:
             metrics_raw = defaultdict(list)
+            clauses = self.graph.to_clauses()
             for _ in range(self.solve_repetitions):
-                for k, v in self.solver.solve_instance(self.graph).items():
+                for k, v in self.solver.solve_instance(clauses).items():
                     metrics_raw[k].append(v)
             agg_fn = getattr(np, self.solve_agg)
             metrics = {}

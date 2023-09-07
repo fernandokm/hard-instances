@@ -1,8 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Generic, TypeVar
-
-if TYPE_CHECKING:
-    from generation.graph import SATGraph
+from typing import Generic, TypeVar
 
 Value = TypeVar("Value")
 
@@ -11,7 +8,7 @@ class Solver(ABC, Generic[Value]):
     @abstractmethod
     def solve_instance(
         self,
-        instance: "SATGraph",
+        instance: list[list[int]],
     ) -> dict[str, Value]:
         pass
 
