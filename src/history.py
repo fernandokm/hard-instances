@@ -1,7 +1,11 @@
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import utils
+from generation.graph import SATGraph
 
 
 @dataclass
@@ -11,10 +15,19 @@ class History:
     last_step: pd.DataFrame
     episode: pd.DataFrame
 
-    def limit_episodes(self, num_episodes: int):
-        self.step = self.step[self.step["episode"] < num_episodes]
-        self.last_step = self.last_step[self.last_step["episode"] < num_episodes]
-        self.episode = self.episode[self.episode["episode"] < num_episodes]
+    def get_graph(self, episode: int, max_steps: int = sys.maxsize) -> SATGraph:
+        raw_template: str = self.episode.loc[episode, "template"]  # type: ignore
+        template = utils.parse_template(raw_template)
+        graph = SATGraph.from_template(template)
+
+        actions = self.step.loc[(episode, slice(None)), ["action_0", "action_1"]]
+        assert (np.diff(actions.index.get_level_values("step")) == 1).all()
+
+        for (_, step), a0, a1 in actions.itertuples(name=None):
+            if step >= max_steps:
+                break
+            graph.merge(a0, a1)
+        return graph
 
     @staticmethod
     def load(directory: str | Path, keep_full_steps: bool = False) -> "History":
