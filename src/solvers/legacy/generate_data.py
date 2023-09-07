@@ -12,7 +12,7 @@ from .utils import decode_array, encode_array
 sns.set()
 
 
-def generate_metric_data(solver: Solver, metric: str, size: tuple[int, int]=(25, 5)):
+def generate_metric_data(solver: Solver, metric: str, size: tuple[int, int] = (25, 5)):
     cache_file = (
         f".cache/test-metrics_{solver.name}_{metric}_{size[0]}x{size[1]}.parquet"
     )
@@ -48,17 +48,16 @@ def generate_metric_data(solver: Solver, metric: str, size: tuple[int, int]=(25,
     return results
 
 
-def generate_data(solver: Solver, metrics: list[str], size: tuple[int, int]=(25, 5)):
+def generate_data(solver: Solver, metrics: list[str], size: tuple[int, int] = (25, 5)):
     results = []
     for metric in metrics:
         print(f"Generating/loading data for {solver.name}/{metric}")
         r = generate_metric_data(solver, metric, size)
         r["optimized_metric"] = metric
-        r["iter"] = np.arange(r.shape[0]) // 1000
+        r["iter"] = np.arange(r.shape[0]) // 1000  # type: ignore
         results.append(r)
 
     return pd.concat(results, axis=0)
-
 
 
 minisat = PySAT("minisat22")
