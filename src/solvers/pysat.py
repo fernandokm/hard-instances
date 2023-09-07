@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 import pysat.formula
 import pysat.solvers
@@ -9,16 +9,7 @@ if TYPE_CHECKING:
     from generation.graph import SATGraph
 
 
-class Result(TypedDict):
-    feasible: bool
-    time_cpu: float
-    restarts: int
-    conflicts: int
-    decisions: int
-    propagations: int
-
-
-class PySAT(Solver):
+class PySAT(Solver[int | float | bool]):
     def __init__(self, solver_name: str):
         self.solver_name = solver_name
 
@@ -32,18 +23,18 @@ class PySAT(Solver):
     def solve_instance(
         self,
         instance: "SATGraph | pysat.formula.CNF",
-    ) -> Result:
+    ) -> dict[str, int | float | bool]:
         if isinstance(instance, pysat.formula.CNF):
             clauses = instance.clauses
         else:
             clauses = instance.to_clauses()
         with self.make_pysat_solver(clauses) as solver:
             feasible = solver.solve()
-            return Result(
-                feasible=feasible,
-                time_cpu=solver.time(),
+            return {
+                "feasible": feasible,
+                "time_cpu": solver.time(),
                 **solver.accum_stats(),  # type: ignore
-            )
+            }
 
     @property
     def name(self):

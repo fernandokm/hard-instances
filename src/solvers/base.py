@@ -1,16 +1,18 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
     from generation.graph import SATGraph
 
+Value = TypeVar("Value")
 
-class Solver(ABC):
+
+class Solver(ABC, Generic[Value]):
     @abstractmethod
     def solve_instance(
         self,
         instance: "SATGraph",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Value]:
         pass
 
     @property
