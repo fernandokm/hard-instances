@@ -22,7 +22,7 @@ class Args(argparse.Namespace):
 def parse_args() -> Args:
     parser = argparse.ArgumentParser()
     parser.add_argument("results_dir", type=Path)
-    parser.add_argument("-o", "--output", type=str, default="rerun.csv")
+    parser.add_argument("-o", "--output", type=str, default="rerun.parquet")
     parser.add_argument("--num_cpus", type=int, default=1)
     parser.add_argument("--num_repetitions", type=int, default=1000)
     parser.add_argument("--solver", type=str, default="minisat22")
@@ -41,7 +41,7 @@ def main():
 
     history = History.load(args.results_dir, keep_full_steps=True)
 
-    tasks = list(history.episode.index)[:100]
+    tasks = list(history.episode.index)
     results = []
     with multiprocessing.Pool(args.num_cpus, worker_init, (args,)) as pool:
         it = tqdm(
@@ -53,7 +53,7 @@ def main():
         for partial_results in it:
             results += partial_results
 
-    results_df = pd.DataFrame(results).set_index(["episode", "run"])  # .sort_index()
+    results_df = pd.DataFrame(results).set_index(["episode", "run"]).sort_index()
     if outfile.suffix.lower() == ".parquet":
         results_df.to_parquet(outfile)
     else:
