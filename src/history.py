@@ -13,6 +13,7 @@ class History:
     directory: Path
     step: pd.DataFrame
     last_step: pd.DataFrame
+    rerun: pd.DataFrame
     episode: pd.DataFrame
 
     def get_graph(self, episode: int, max_steps: int = sys.maxsize) -> SATGraph:
@@ -42,6 +43,11 @@ class History:
 
         episode["num_steps"] = last_step["step"] + 1
 
+        try:
+            rerun = _read_sorted(directory / "rerun", index_cols=["episode", "run"])
+        except FileNotFoundError:
+            rerun = pd.DataFrame()
+
         if not keep_full_steps:
             step = pd.DataFrame(columns=step.columns)
 
@@ -49,18 +55,23 @@ class History:
             directory=directory,
             step=step,
             last_step=last_step,
+            rerun=rerun,
             episode=episode,
         )
 
 
 def _read_sorted(path: Path, index_cols: str | list[str]):
-    if path.with_suffix(".parquet").exists():
-        df = pd.read_parquet(path.with_suffix(".parquet"))
+    full_path = path.with_suffix(".parquet")
+    if full_path.exists():
+        df = pd.read_parquet(full_path)
     else:
-        df = pd.read_csv(path.with_suffix(".csv"))
+        full_path = full_path.with_suffix(".csv")
+        df = pd.read_csv(full_path)
 
-    df.set_index(index_cols, inplace=True)
+    if set(df.index.names) != set(index_cols):
+        df.set_index(index_cols, inplace=True)
     if not df.index.is_monotonic_increasing:
+        print(f"File {full_path} is not sorted")
         # Check first if the values are already sorted
         # Since all history files are supposed to be already sorted,
         # we should always be able to avoid sorting
