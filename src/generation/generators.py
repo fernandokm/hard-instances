@@ -96,24 +96,39 @@ class G2SATPolicy:
         return action, log_prob
 
 
-def train_reinforce(
-    policy: G2SATPolicy,
-    optimizer: Optimizer,
-    num_episodes: int = 50_000,
-    gamma: float = 0.99,
-    action_mode: Literal["sample", "argmax"] = "argmax",
-    loggers: list[logging.Logger] | None = None,
-    seed: Seed = None,
-) -> None:
-    rng = np.random.default_rng(seed)
-    logger = logging.setup_loggers(
-        loggers,
-        num_episodes,
-        default_tqdm_metrics=["loss", "return/shaped", "return/original"],
-    )
+class ReinforceTrainer:
+    def __init__(
+        self,
+        policy: G2SATPolicy,
+        optimizer: Optimizer,
+        num_episodes: int = 50_000,
+        gamma: float = 0.99,
+        action_mode: Literal["sample", "argmax"] = "argmax",
+        loggers: list[logging.Logger] | None = None,
+        seed: Seed = None,
+    ):
+        self.policy = policy
+        self.env = policy.env
+        self.optimizer = optimizer
+        self.num_episodes = num_episodes
+        self.gamma = gamma
+        self.action_mode: Literal["sample", "argmax"] = action_mode
 
-    env = policy.env
-    for _ in range(num_episodes):
+        self.logger = logging.setup_loggers(
+            loggers,
+            num_episodes,
+            default_tqdm_metrics=["loss", "return/shaped", "return/original"],
+        )
+
+        self.rng = np.random.default_rng(seed)
+
+    def train(self):
+        for episode in range(self.num_episodes):
+            self.run_episode(evaluation=False)
+        self.logger.close()
+        self.logger = logging.LoggerList([])  # Dummy logger
+
+    def run_episode(self, evaluation: bool = True) -> None:
         log_probs = []
         rewards = []
 
@@ -121,50 +136,44 @@ def train_reinforce(
         # the initial states depend only on the seed (and not on what happened during
         # the previous episodes). In particular, this ensures that the initial templates
         # used are the same across all experiments.
-        obs, episode_info = env.reset(seed=rng.spawn(1)[0])
+        obs, episode_info = self.env.reset(seed=self.rng.spawn(1)[0])
 
         terminated = False
         num_steps = 0
         while not terminated:
             t0 = time.monotonic()
-            action, log_prob = policy.sample_action(
-                obs,
-                action_mode,
-            )
+            action, log_prob = self.policy.sample_action(obs, self.action_mode)
             t1 = time.monotonic()
 
-            obs, reward, terminated, truncated, info = env.step(np.asarray(action))
+            obs, reward, terminated, truncated, info = self.env.step(np.asarray(action))
 
             info["action"] = action
             info["reward"] = reward
             info["log_prob"] = log_prob.item()
             info["timing"]["predict"] = t1 - t0
 
-            logger.step(info)
+            self.logger.step(info)
             log_probs.append(log_prob)
             rewards.append(reward)
             num_steps += 1
 
         losses = []
-        returns = compute_returns(rewards, gamma, device=policy.device)
+        returns = compute_returns(rewards, self.gamma, device=self.policy.device)
         for log_prob, ret in zip(log_probs, returns):
             losses.append(-log_prob.view(1) * ret)
 
         loss = torch.cat(losses).sum()
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if not evaluation:
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
         episode_info |= {
             "loss": loss.item(),
             "return/shaped": returns[0],
-            "return/original": rewards[-1] * gamma ** (num_steps - 1),
+            "return/original": rewards[-1] * self.gamma ** (num_steps - 1),
         }
-        logger.end_episode(episode_info)
-
-    logger.close()
-
-    return None
+        self.logger.end_episode(episode_info)
 
 
 def compute_returns(

@@ -9,7 +9,7 @@ import torch
 import torch_geometric as tg
 import utils
 from generation.envs import G2SATEnv
-from generation.generators import G2SATPolicy, logging, train_reinforce
+from generation.generators import G2SATPolicy, ReinforceTrainer, logging
 from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
 from solvers.pysat import PySAT
@@ -171,7 +171,7 @@ def main():
         writer = SummaryWriter(str(logdir))
         loggers.append(logging.TensorboardLogger(writer))
 
-    train_reinforce(
+    trainer = ReinforceTrainer(
         policy,
         optimizer=optim.AdamW(model.parameters(), lr=args.lr),
         num_episodes=args.num_episodes,
@@ -180,6 +180,7 @@ def main():
         action_mode=args.action_mode,
         seed=args.seed,
     )
+    trainer.train()
 
 
 if __name__ == "__main__":
