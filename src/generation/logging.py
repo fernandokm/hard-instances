@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 
 class Logger:
     def __init__(self) -> None:
-        self.__closed = False
+        pass
 
     def set_num_episodes(self, n: int) -> None:
         pass
@@ -124,23 +124,19 @@ class TensorboardLogger(Logger):
         else:
             self.writer = SummaryWriter(writer)
 
-        self._last_step = {}
         self._num_steps = 0
         self._num_episodes = 0
 
     def step(self, info: dict) -> None:
-        info = _flatten_dict(info)
         self._write_scalars(info, global_step=self._num_steps, suffix="_step")
-        self._last_step_info = info
         self._num_steps += 1
 
     def end_episode(self, info: dict) -> None:
-        full_info = _flatten_dict(self._last_step_info)
-        full_info.update(_flatten_dict(info))
-        self._write_scalars(full_info, global_step=self._num_episodes, suffix="_ep")
+        self._write_scalars(info, global_step=self._num_episodes, suffix="_ep")
         self._num_episodes += 1
 
     def _write_scalars(self, data: dict, global_step, suffix: str = "") -> None:
+        data = _flatten_dict(data)
         for k, v in data.items():
             if isinstance(v, int | float | np.number):
                 k += suffix

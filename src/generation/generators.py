@@ -152,6 +152,9 @@ class ReinforceTrainer:
             info["log_prob"] = log_prob.item()
             info["timing"]["predict"] = t1 - t0
 
+            if terminated:
+                episode_info["metrics"] = info["metrics"]
+
             self.logger.step(info)
             log_probs.append(log_prob)
             rewards.append(reward)
