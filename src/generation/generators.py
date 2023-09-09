@@ -167,9 +167,12 @@ class ReinforceTrainer:
 
         loss = torch.cat(losses).sum()
         if not evaluation:
+            t0 = time.monotonic()
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            t1 = time.monotonic()
+            episode_info["timing"]["train"] = t1 - t0
 
         episode_info |= {
             "loss": loss.item(),
