@@ -1,3 +1,4 @@
+import copy
 import time
 from typing import Literal
 
@@ -103,6 +104,8 @@ class ReinforceTrainer:
         optimizer: Optimizer,
         num_episodes: int = 50_000,
         gamma: float = 0.99,
+        eval_env: G2SATEnv | None = None,
+        eval_freq: int = 1,
         action_mode: Literal["sample", "argmax"] = "argmax",
         loggers: list[logging.Logger] | None = None,
         seed: Seed = None,
@@ -112,6 +115,8 @@ class ReinforceTrainer:
         self.optimizer = optimizer
         self.num_episodes = num_episodes
         self.gamma = gamma
+        self.eval_env = eval_env
+        self.eval_freq = eval_freq
         self.action_mode: Literal["sample", "argmax"] = action_mode
 
         self.logger = logging.setup_loggers(
@@ -120,15 +125,38 @@ class ReinforceTrainer:
             default_tqdm_metrics=["loss", "return/shaped", "return/original"],
         )
 
-        self.rng = np.random.default_rng(seed)
+        self.train_rng, self.eval_rng = np.random.default_rng(seed).spawn(2)
 
     def train(self):
         for episode in range(self.num_episodes):
-            self.run_episode(evaluation=False)
+            if episode % self.eval_freq == 0:
+                self.evaluate()
+            self.run_episode(self.env, self.train_rng, evaluation=False)
+        self.evaluate()
         self.logger.close()
         self.logger = logging.LoggerList([])  # Dummy logger
 
-    def run_episode(self, evaluation: bool = True) -> None:
+    def evaluate(self):
+        if self.eval_env is None:
+            return
+        # Re-use the same rng at every eval loop
+        rng = copy.deepcopy(self.eval_rng)
+        if self.eval_env.fixed_templates:
+            num_episodes = len(self.eval_env.fixed_templates)
+        else:
+            num_episodes = 1
+
+        for _ in range(num_episodes):
+            self.run_episode(self.eval_env, rng, evaluation=True)
+
+    def run_episode(
+        self,
+        env: G2SATEnv,
+        base_rng: np.random.Generator,
+        evaluation: bool = True,
+    ) -> None:
+        self.logger.start_episode(evaluation)
+
         log_probs = []
         rewards = []
 
@@ -136,7 +164,7 @@ class ReinforceTrainer:
         # the initial states depend only on the seed (and not on what happened during
         # the previous episodes). In particular, this ensures that the initial templates
         # used are the same across all experiments.
-        obs, episode_info = self.env.reset(seed=self.rng.spawn(1)[0])
+        obs, episode_info = env.reset(seed=base_rng.spawn(1)[0])
 
         terminated = False
         num_steps = 0
@@ -145,7 +173,7 @@ class ReinforceTrainer:
             action, log_prob = self.policy.sample_action(obs, self.action_mode)
             t1 = time.monotonic()
 
-            obs, reward, terminated, truncated, info = self.env.step(np.asarray(action))
+            obs, reward, terminated, truncated, info = env.step(np.asarray(action))
 
             info["action"] = action
             info["reward"] = reward
@@ -166,7 +194,9 @@ class ReinforceTrainer:
             losses.append(-log_prob.view(1) * ret)
 
         loss = torch.cat(losses).sum()
-        if not evaluation:
+        if evaluation:
+            episode_info["timing"]["train"] = 0
+        else:
             t0 = time.monotonic()
             self.optimizer.zero_grad()
             loss.backward()

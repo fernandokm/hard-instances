@@ -13,7 +13,10 @@ class Logger:
     def __init__(self) -> None:
         pass
 
-    def set_num_episodes(self, n: int) -> None:
+    def set_num_episodes(self, episodes: int) -> None:
+        pass
+
+    def start_episode(self, evaluation: bool = False) -> None:
         pass
 
     def step(self, info: dict) -> None:
@@ -31,8 +34,11 @@ class WithTiming(Logger):
         self.inner = inner
         self.time = defaultdict(float)
 
-    def set_num_episodes(self, n: int) -> None:
-        return self.inner.set_num_episodes(n)
+    def set_num_episodes(self, episodes: int) -> None:
+        return self.inner.set_num_episodes(episodes)
+
+    def start_episode(self, evaluation: bool) -> None:
+        return self.inner.start_episode(evaluation)
 
     def _with_time(self, fn, info: dict):
         t0 = time.monotonic()
@@ -65,9 +71,13 @@ class LoggerList(Logger):
     def __init__(self, loggers: list[Logger]) -> None:
         self.loggers = loggers
 
-    def set_num_episodes(self, n: int) -> None:
+    def set_num_episodes(self, episodes: int) -> None:
         for logger in self.loggers:
-            logger.set_num_episodes(n)
+            logger.set_num_episodes(episodes)
+
+    def start_episode(self, evaluation: bool = False) -> None:
+        for logger in self.loggers:
+            logger.start_episode(evaluation)
 
     def step(self, info: dict) -> None:
         for logger in self.loggers:
@@ -95,23 +105,31 @@ class TqdmLogger(Logger):
         self.pbar = tqdm(**tqdm_kwargs)
         self.metrics = metrics.copy()
         self._postfix = {}
-        self._steps = 0
+        self._eval_episodes = 0
+        self._evaluation = False
 
-    def set_num_episodes(self, n: int) -> None:
-        self.pbar.total = n
+    def set_num_episodes(self, episodes: int) -> None:
+        self.pbar.total = episodes
+
+    def start_episode(self, evaluation: bool = False) -> None:
+        self._evaluation = evaluation
 
     def step(self, info: dict) -> None:
-        self._steps += 1
-        self._postfix["steps"] = self._steps
-        self.pbar.set_postfix(self._postfix, refresh=False)
+        pass
 
     def end_episode(self, info: dict) -> None:
-        self._postfix = {"step": self._steps}
+        if self._evaluation:
+            self._eval_episodes += 1
+            self._postfix["eval_episodes"] = self._eval_episodes
+            self._evaluation = False
+            self.pbar.set_postfix(self._postfix, refresh=True)
+            return
         for k in self.metrics:
             if k in info:
                 self._postfix[k] = info[k]
         self.pbar.set_postfix(self._postfix, refresh=False)
         self.pbar.update()
+        self._postfix["eval_episodes"] = 0
 
     def close(self):
         self.pbar.close()
@@ -126,19 +144,42 @@ class TensorboardLogger(Logger):
 
         self._num_steps = 0
         self._num_episodes = 0
+        self._num_eval_episodes = 0
+        self._num_eval_steps = 0
+        self._evaluation = False
+
+    def start_episode(self, evaluation: bool = False) -> None:
+        self._evaluation = evaluation
 
     def step(self, info: dict) -> None:
-        self._write_scalars(info, global_step=self._num_steps, suffix="_step")
-        self._num_steps += 1
+        self._write_scalars(info, is_step=True)
+        if self._evaluation:
+            self._num_eval_steps += 1
+        else:
+            self._num_steps += 1
 
     def end_episode(self, info: dict) -> None:
-        self._write_scalars(info, global_step=self._num_episodes, suffix="_ep")
-        self._num_episodes += 1
+        self._write_scalars(info, is_step=False)
+        if self._evaluation:
+            self._num_eval_episodes += 1
+        else:
+            self._num_episodes += 1
 
-    def _write_scalars(self, data: dict, global_step, suffix: str = "") -> None:
+    def _write_scalars(self, data: dict, is_step: bool) -> None:
         data = _flatten_dict(data)
+        if is_step:
+            global_step = self._num_eval_steps if self._evaluation else self._num_steps
+            suffix = "_step"
+        else:
+            global_step = (
+                self._num_eval_episodes if self._evaluation else self._num_episodes
+            )
+            suffix = "_ep"
+
         for k, v in data.items():
             if isinstance(v, int | float | np.number):
+                if self._evaluation:
+                    k = "eval/" + k
                 k += suffix
                 self.writer.add_scalar(k, v, global_step)
 
@@ -177,24 +218,35 @@ class FileLogger(Logger):
         self.convert_to_parquet = convert_to_parquet
 
         self._steps = []
-        self._num_episodes = 0
+        self._episode = 0
+        self._eval_episode = 0
+        self._evaluation = False
+
+    def start_episode(self, evaluation: bool = False) -> None:
+        self._evaluation = evaluation
 
     def step(self, info: dict) -> None:
         info = _flatten_dict(info, normalize_types=True)
         info["step"] = len(self._steps)
-        info["episode"] = self._num_episodes
+        info["episode"] = self._episode
+        info["eval_episode"] = self._eval_episode if self._evaluation else None
 
         self._steps.append(info)
 
     def end_episode(self, info: dict) -> None:
         info = _flatten_dict(info, normalize_types=True)
-        info["episode"] = self._num_episodes
+        info["episode"] = self._episode
+        info["eval_episode"] = self._eval_episode if self._evaluation else None
 
         self.out_episode.writerows([info])
         self.out_step.writerows(self._steps)
 
         self._steps.clear()
-        self._num_episodes += 1
+        if self._evaluation:
+            self._eval_episode += 1  # type: ignore
+        else:
+            self._episode += 1
+            self._eval_episode = 0
 
     @staticmethod
     def _convert_to_parquet(name: str):
@@ -211,20 +263,6 @@ class FileLogger(Logger):
         if self.convert_to_parquet:
             self._convert_to_parquet(self.outdir + "/history_step")
             self._convert_to_parquet(self.outdir + "/history_episode")
-
-
-class HistoryLogger(Logger):
-    def __init__(self):
-        self.step_info = []
-        self.history = []
-
-    def step(self, info: dict) -> None:
-        self.step_info.append(info)
-
-    def end_episode(self, info: dict) -> None:
-        episode_info = {"step_info": self.step_info, **info}
-        self.history.append(episode_info)
-        self.step_info = []
 
 
 def setup_loggers(

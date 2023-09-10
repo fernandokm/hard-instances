@@ -38,6 +38,10 @@ class Args(argparse.Namespace):
     compress_observations: bool
     action_mode: Literal["sample", "argmax"]
     template_file: Path | None
+    eval_freq: int
+    eval_files: list[Path]
+    eval_repetitions: int
+    eval_agg: str
     metric: str
     seed: int
     tensorboard: bool
@@ -89,6 +93,10 @@ def parse_args() -> Args:
     parser.add_argument("--action_mode", choices=["sample", "argmax"], default="argmax")
     parser.add_argument("--template_file", type=Path, default=None)
     parser.add_argument("--compress_observations", action="store_true")
+    parser.add_argument("--eval_freq", type=int, default=1)
+    parser.add_argument("--eval_file", type=Path, action="append", dest="eval_files")
+    parser.add_argument("--eval_repetitions", type=int, default=-1)
+    parser.add_argument("--eval_agg", choices=["mean", "median", "min"], default="")
     parser.add_argument(
         "--metric",
         choices=["time_cpu", "decisions", "conflicts", "restarts", "propagations"],
@@ -99,6 +107,12 @@ def parse_args() -> Args:
 
     parser.set_defaults(gpu=torch.cuda.is_available())
     args = parser.parse_args(namespace=Args())
+
+    if args.eval_repetitions == -1:
+        args.eval_repetitions = args.solve_repetitions
+    if args.eval_agg == "":
+        args.eval_agg = args.solve_agg
+
     return args
 
 
@@ -135,25 +149,39 @@ def main():
 
     print("Logdir:", logdir)
 
-    if args.template_file is None:
-        fixed_templates = None
-    else:
+    fixed_templates = None
+    if args.template_file is not None:
         fixed_templates = utils.parse_template_file(args.template_file)
+    eval_templates = []
+    for file in args.eval_files:
+        eval_templates += utils.parse_template_file(file)
 
+    env_config = {
+        "num_vars": args.num_vars,
+        "num_clauses": args.num_clauses,
+        "solver": PySAT("minisat22"),
+        "reward_metric": args.metric,
+        "compress_observations": args.compress_observations,
+        "num_sampled_pairs": args.num_sampled_pairs,
+        "intermediate_rewards": args.intermediate_rewards,
+        "allow_overlaps": args.allow_overlaps,
+        "sampling_method": args.sampling_method,
+    }
     env = G2SATEnv(
-        args.num_vars,
-        args.num_clauses * 3,
-        PySAT("minisat22"),
-        args.metric,
-        compress_observations=args.compress_observations,
-        num_sampled_pairs=args.num_sampled_pairs,
-        intermediate_rewards=args.intermediate_rewards,
-        allow_overlaps=args.allow_overlaps,
-        sampling_method=args.sampling_method,
+        **env_config,
         fixed_templates=fixed_templates,
         solve_repetitions=args.solve_repetitions,
         solve_agg=args.solve_agg,
     )
+    if eval_templates:
+        eval_env = G2SATEnv(
+            **env_config,
+            fixed_templates=eval_templates,
+            solve_repetitions=args.eval_repetitions,
+            solve_agg=args.eval_agg,
+        )
+    else:
+        eval_env = None
     model = SAGE(
         input_dim=1 if env.compress_observations else 3,
         feature_dim=args.feature_dim,
@@ -176,6 +204,8 @@ def main():
         optimizer=optim.AdamW(model.parameters(), lr=args.lr),
         num_episodes=args.num_episodes,
         gamma=args.gamma,
+        eval_env=eval_env,
+        eval_freq=args.eval_freq,
         loggers=loggers,
         action_mode=args.action_mode,
         seed=args.seed,
