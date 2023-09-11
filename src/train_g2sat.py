@@ -9,7 +9,7 @@ import torch
 import torch_geometric as tg
 import utils
 from generation.envs import G2SATEnv
-from generation.generators import G2SATPolicy, ReinforceTrainer, logging
+from generation.generators import G2SATPolicy, ReinforceTrainer, callbacks
 from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
 from solvers.pysat import PySAT
@@ -196,10 +196,10 @@ def main():
         model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model)
 
-    loggers: list[logging.Logger] = [logging.FileLogger(str(logdir))]
+    cbs: list[callbacks.Callback] = [callbacks.HistoryWriter(str(logdir))]
     if args.tensorboard:
         writer = SummaryWriter(str(logdir))
-        loggers.append(logging.TensorboardLogger(writer))
+        cbs.append(callbacks.Tensorboard(writer))
 
     trainer = ReinforceTrainer(
         policy,
@@ -208,7 +208,7 @@ def main():
         gamma=args.gamma,
         eval_env=eval_env,
         eval_freq=args.eval_freq,
-        loggers=loggers,
+        callbacks_list=cbs,
         action_mode=args.action_mode,
         seed=args.seed,
     )

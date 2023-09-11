@@ -72,6 +72,14 @@ class History:
         if not load_step:
             step = pd.DataFrame(columns=step.columns)
 
+        # Update old column names:
+        episode.rename(
+            columns={"timing/logger": "timing/callbacks"}, inplace=True, errors="ignore"
+        )
+        step.rename(
+            columns={"timing/logger": "timing/callbacks"}, inplace=True, errors="ignore"
+        )
+
         return History(
             directory=directory,
             step=step,

@@ -5,7 +5,7 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 import torch
-from generation import logging
+from generation import callbacks
 from gymnasium.spaces import GraphInstance
 from torch import nn
 from torch.distributions import Categorical
@@ -107,7 +107,7 @@ class ReinforceTrainer:
         eval_env: G2SATEnv | None = None,
         eval_freq: int = 1,
         action_mode: Literal["sample", "argmax"] = "argmax",
-        loggers: list[logging.Logger] | None = None,
+        callbacks_list: list[callbacks.Callback] | None = None,
         seed: Seed = None,
     ):
         self.policy = policy
@@ -119,8 +119,8 @@ class ReinforceTrainer:
         self.eval_freq = eval_freq
         self.action_mode: Literal["sample", "argmax"] = action_mode
 
-        self.logger = logging.setup_loggers(
-            loggers,
+        self.callback = callbacks.setup_callbacks(
+            callbacks_list,
             num_episodes,
             default_tqdm_metrics=["loss", "return/shaped", "return/original"],
         )
@@ -128,11 +128,12 @@ class ReinforceTrainer:
         self.train_rng, eval_rng = np.random.default_rng(seed).spawn(2)
 
         # Re-use the same rng at every eval loop
-        # See https://github.com/numpy/numpy/issues/24086#issuecomment-1614754923 for details
+        # See https://github.com/numpy/numpy/issues/24086#issuecomment-1614754923
+        # for details
         eval_seed_seq = eval_rng.bit_generator.seed_seq
         bit_generator_type = type(eval_rng.bit_generator)
         self.build_eval_rng = lambda: np.random.Generator(
-            bit_generator_type(copy.deepcopy(eval_seed_seq)) # type: ignore
+            bit_generator_type(copy.deepcopy(eval_seed_seq))  # type: ignore
         )
 
     def train(self):
@@ -141,8 +142,8 @@ class ReinforceTrainer:
                 self.evaluate()
             self.run_episode(self.env, self.train_rng, evaluation=False)
         self.evaluate()
-        self.logger.close()
-        self.logger = logging.LoggerList([])  # Dummy logger
+        self.callback.close()
+        self.callback = callbacks.CallbackList([])  # Dummy callback
 
     def evaluate(self):
         if self.eval_env is None:
@@ -161,7 +162,7 @@ class ReinforceTrainer:
         base_rng: np.random.Generator,
         evaluation: bool = True,
     ) -> None:
-        self.logger.start_episode(evaluation)
+        self.callback.on_episode_start(evaluation)
 
         log_probs = []
         rewards = []
@@ -189,14 +190,14 @@ class ReinforceTrainer:
             if terminated:
                 episode_info["metrics"] = info["metrics"]
 
-            self.logger.step(info)
+            self.callback.on_step(info)
             log_probs.append(log_prob)
             rewards.append(reward)
             num_steps += 1
 
         losses = []
         returns = compute_returns(rewards, self.gamma, device=self.policy.device)
-        for log_prob, ret in zip(log_probs, returns):
+        for log_prob, ret in zip(log_probs, returns, strict=True):
             losses.append(-log_prob.view(1) * ret)
 
         loss = torch.cat(losses).sum()
@@ -215,7 +216,7 @@ class ReinforceTrainer:
             "return/shaped": returns[0],
             "return/original": rewards[-1] * self.gamma ** (num_steps - 1),
         }
-        self.logger.end_episode(episode_info)
+        self.callback.on_episode_end(episode_info)
 
 
 def compute_returns(
