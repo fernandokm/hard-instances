@@ -69,8 +69,12 @@ def _read(path: Path, index_cols: list[str]):
     if full_path.exists():
         df = pd.read_parquet(full_path)
     else:
-        full_path = full_path.with_suffix(".csv")
-        df = pd.read_csv(full_path)
+        full_path = path.with_suffix(".csv")
+        if full_path.exists():
+            df = pd.read_csv(full_path)
+        else:
+            msg = str(path.with_suffix(".{parquet,csv}"))
+            raise FileNotFoundError(msg)
 
     if set(df.index.names) != {None}:
         df.reset_index(inplace=True)
