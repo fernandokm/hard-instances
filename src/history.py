@@ -21,8 +21,8 @@ class History:
         eval_episode: float = np.nan,
         max_steps: int = sys.maxsize,
     ) -> SATGraph:
-        raw_template: str = self.episode.loc[(episode, eval_episode), "template"]  # type: ignore
-        template = utils.parse_template(raw_template)
+        raw_template = self.episode.loc[(episode, eval_episode), "template"]
+        template = utils.parse_template(raw_template) # type: ignore
         graph = SATGraph.from_template(template)
 
         actions = self.step.loc[

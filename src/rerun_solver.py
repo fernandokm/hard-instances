@@ -2,7 +2,10 @@
 
 import argparse
 import multiprocessing
+import multiprocessing.synchronize
+from contextlib import AbstractContextManager
 from pathlib import Path
+from types import TracebackType
 
 import pandas as pd
 from history import History
@@ -16,6 +19,9 @@ class Args(argparse.Namespace):
     num_cpus: int
     num_repetitions: int
     solver: str
+    noise_start: float
+    noise_end: float
+    noise_cpus: int
     force: bool
 
 
@@ -26,6 +32,9 @@ def parse_args() -> Args:
     parser.add_argument("--num_cpus", type=int, default=1)
     parser.add_argument("--num_repetitions", type=int, default=1000)
     parser.add_argument("--solver", type=str, default="minisat22")
+    parser.add_argument("--noise_start", type=float, default=1)
+    parser.add_argument("--noise_end", type=float, default=0)
+    parser.add_argument("--noise_cpus", type=int, default=1)
     parser.add_argument("-f", "--force", action="store_true")
 
     args = parser.parse_args(namespace=Args())
@@ -44,14 +53,18 @@ def main():
     tasks = list(history.episode.index)
     results = []
     with multiprocessing.Pool(args.num_cpus, worker_init, (args,)) as pool:
-        it = tqdm(
-            pool.imap_unordered(worker_solve, tasks),
-            total=len(tasks),
-            desc=str(args.results_dir),
-            unit="episodes",
-        )
-        for partial_results in it:
-            results += partial_results
+        with Spinner(args.noise_cpus) as spinner:
+            it = tqdm(
+                pool.imap_unordered(worker_solve, tasks),
+                total=len(tasks),
+                desc=str(args.results_dir),
+                unit="episodes",
+            )
+            for partial_results in it:
+                progress = it.n / it.total
+                spinner.set_spin(args.noise_start < progress < args.noise_end)
+
+                results += partial_results
 
     results_df = pd.DataFrame(results).set_index(["episode", "run"]).sort_index()
     if outfile.suffix.lower() == ".parquet":
@@ -78,6 +91,45 @@ def worker_solve(episode: int):
         results.append(r)
 
     return results
+
+
+class Spinner(AbstractContextManager):
+    def __init__(self, num_cpus: int) -> None:
+        self.num_cpus = num_cpus
+        self.processes: list[multiprocessing.Process] = []
+        self.run_event = multiprocessing.Event()
+        for _ in range(self.num_cpus):
+            p = multiprocessing.Process(target=Spinner.spin, args=(self.run_event,))
+            p.start()
+            self.processes.append(p)
+
+    def set_spin(self, status: bool) -> None:
+        if status:
+            self.run_event.set()
+        else:
+            self.run_event.clear()
+
+    def __enter__(self) -> "Spinner":
+        return super().__enter__()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        for p in self.processes:
+            p.kill()
+            p.join()
+            p.close()
+
+    @staticmethod
+    def spin(run: multiprocessing.synchronize.Event):
+        while True:
+            run.wait()
+            while run.is_set():
+                for _ in range(10000):
+                    pass
 
 
 if __name__ == "__main__":
