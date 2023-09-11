@@ -12,7 +12,6 @@ from generation.graph import SATGraph
 class History:
     directory: Path
     step: pd.DataFrame
-    last_step: pd.DataFrame
     rerun: pd.DataFrame
     episode: pd.DataFrame
 
@@ -26,7 +25,9 @@ class History:
         template = utils.parse_template(raw_template)
         graph = SATGraph.from_template(template)
 
-        actions = self.step.loc[(episode, eval_episode, slice(None)), ["action_0", "action_1"]]
+        actions = self.step.loc[
+            (episode, eval_episode, slice(None)), ["action_0", "action_1"]
+        ]
         assert (np.diff(actions.index.get_level_values("step")) == 1).all()
 
         for (_, _, step), a0, a1 in actions.itertuples(name=None):
@@ -36,34 +37,44 @@ class History:
         return graph
 
     @staticmethod
-    def load(directory: str | Path, keep_full_steps: bool = False) -> "History":
+    def load(directory: str | Path, load_step: bool = False) -> "History":
         if not isinstance(directory, Path):
             directory = Path(directory)
 
-        step = _read(
-            directory / "history_step", index_cols=["episode", "eval_episode", "step"]
-        )
         episode = _read(
             directory / "history_episode", index_cols=["episode", "eval_episode"]
         )
+        have_episode_metrics = any(
+            col.startswith("metrics/") for col in episode.columns
+        )
 
-        last_step = step.reset_index(level="step")
-        last_step = last_step.loc[~last_step.index.duplicated(keep="last")]
+        if load_step or not have_episode_metrics:
+            step = _read(
+                directory / "history_step",
+                index_cols=["episode", "eval_episode", "step"],
+            )
+        else:
+            step = pd.DataFrame()
 
-        episode["num_steps"] = last_step["step"] + 1
+        if not have_episode_metrics:
+            last_step = step.reset_index(level="step")
+            last_step = last_step.loc[~last_step.index.duplicated(keep="last")]
+            metric_cols = [
+                col for col in last_step.columns if col.startswith("metrics/")
+            ]
+            episode.loc[:, metric_cols] = last_step.loc[:, metric_cols]
 
         try:
             rerun = _read(directory / "rerun", index_cols=["episode", "run"])
         except FileNotFoundError:
             rerun = pd.DataFrame()
 
-        if not keep_full_steps:
+        if not load_step:
             step = pd.DataFrame(columns=step.columns)
 
         return History(
             directory=directory,
             step=step,
-            last_step=last_step,
             rerun=rerun,
             episode=episode,
         )

@@ -39,7 +39,7 @@ def main():
         print(f'Output file "{outfile}" exists, use --force to overwrite it')
         return
 
-    history = History.load(args.results_dir, keep_full_steps=True)
+    history = History.load(args.results_dir, load_step=True)
 
     tasks = list(history.episode.index)
     results = []
@@ -64,7 +64,7 @@ def worker_init(args: Args):
     global num_repetitions, solver, history
     num_repetitions = args.num_repetitions
     solver = PySAT(args.solver)
-    history = History.load(args.results_dir, keep_full_steps=True)
+    history = History.load(args.results_dir, load_step=True)
 
 
 def worker_solve(episode: int):
