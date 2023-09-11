@@ -240,6 +240,8 @@ class FileLogger(Logger):
 
         self.out_episode.writerows([info])
         self.out_step.writerows(self._steps)
+        self.out_episode_raw.flush()
+        self.out_step_raw.flush()
 
         self._steps.clear()
         if self._evaluation:
