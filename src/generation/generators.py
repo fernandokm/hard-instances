@@ -125,7 +125,15 @@ class ReinforceTrainer:
             default_tqdm_metrics=["loss", "return/shaped", "return/original"],
         )
 
-        self.train_rng, self.eval_rng = np.random.default_rng(seed).spawn(2)
+        self.train_rng, eval_rng = np.random.default_rng(seed).spawn(2)
+
+        # Re-use the same rng at every eval loop
+        # See https://github.com/numpy/numpy/issues/24086#issuecomment-1614754923 for details
+        eval_seed_seq = eval_rng.bit_generator.seed_seq
+        bit_generator_type = type(eval_rng.bit_generator)
+        self.build_eval_rng = lambda: np.random.Generator(
+            bit_generator_type(copy.deepcopy(eval_seed_seq)) # type: ignore
+        )
 
     def train(self):
         for episode in range(self.num_episodes):
@@ -139,15 +147,13 @@ class ReinforceTrainer:
     def evaluate(self):
         if self.eval_env is None:
             return
-        # Re-use the same rng at every eval loop
-        rng = copy.deepcopy(self.eval_rng)
         if self.eval_env.fixed_templates:
             num_episodes = len(self.eval_env.fixed_templates)
         else:
             num_episodes = 1
 
         for _ in range(num_episodes):
-            self.run_episode(self.eval_env, rng, evaluation=True)
+            self.run_episode(self.eval_env, self.build_eval_rng(), evaluation=True)
 
     def run_episode(
         self,
