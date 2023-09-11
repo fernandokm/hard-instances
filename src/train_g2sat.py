@@ -94,7 +94,9 @@ def parse_args() -> Args:
     parser.add_argument("--template_file", type=Path, default=None)
     parser.add_argument("--compress_observations", action="store_true")
     parser.add_argument("--eval_freq", type=int, default=1)
-    parser.add_argument("--eval_file", type=Path, action="append", dest="eval_files")
+    parser.add_argument(
+        "--eval_file", type=Path, action="append", dest="eval_files", default=[]
+    )
     parser.add_argument("--eval_repetitions", type=int, default=-1)
     parser.add_argument("--eval_agg", choices=["mean", "median", "min"], default="")
     parser.add_argument(
