@@ -16,15 +16,20 @@ class History:
     rerun: pd.DataFrame
     episode: pd.DataFrame
 
-    def get_graph(self, episode: int, max_steps: int = sys.maxsize) -> SATGraph:
-        raw_template: str = self.episode.loc[episode, "template"]  # type: ignore
+    def get_graph(
+        self,
+        episode: int,
+        eval_episode: float = np.nan,
+        max_steps: int = sys.maxsize,
+    ) -> SATGraph:
+        raw_template: str = self.episode.loc[(episode, eval_episode), "template"]  # type: ignore
         template = utils.parse_template(raw_template)
         graph = SATGraph.from_template(template)
 
-        actions = self.step.loc[(episode, slice(None)), ["action_0", "action_1"]]
+        actions = self.step.loc[(episode, eval_episode, slice(None)), ["action_0", "action_1"]]
         assert (np.diff(actions.index.get_level_values("step")) == 1).all()
 
-        for (_, step), a0, a1 in actions.itertuples(name=None):
+        for (_, _, step), a0, a1 in actions.itertuples(name=None):
             if step >= max_steps:
                 break
             graph.merge(a0, a1)
