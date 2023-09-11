@@ -35,8 +35,12 @@ class History:
         if not isinstance(directory, Path):
             directory = Path(directory)
 
-        step = _read_sorted(directory / "history_step", index_cols=["episode", "step"])
-        episode = _read_sorted(directory / "history_episode", index_cols=["episode"])
+        step = _read(
+            directory / "history_step", index_cols=["episode", "eval_episode", "step"]
+        )
+        episode = _read(
+            directory / "history_episode", index_cols=["episode", "eval_episode"]
+        )
 
         last_step = step.reset_index(level="step")
         last_step = last_step.loc[~last_step.index.duplicated(keep="last")]
@@ -44,7 +48,7 @@ class History:
         episode["num_steps"] = last_step["step"] + 1
 
         try:
-            rerun = _read_sorted(directory / "rerun", index_cols=["episode", "run"])
+            rerun = _read(directory / "rerun", index_cols=["episode", "run"])
         except FileNotFoundError:
             rerun = pd.DataFrame()
 
@@ -60,7 +64,7 @@ class History:
         )
 
 
-def _read_sorted(path: Path, index_cols: str | list[str]):
+def _read(path: Path, index_cols: list[str]):
     full_path = path.with_suffix(".parquet")
     if full_path.exists():
         df = pd.read_parquet(full_path)
@@ -68,13 +72,13 @@ def _read_sorted(path: Path, index_cols: str | list[str]):
         full_path = full_path.with_suffix(".csv")
         df = pd.read_csv(full_path)
 
-    if set(df.index.names) != set(index_cols):
-        df.set_index(index_cols, inplace=True)
-    if not df.index.is_monotonic_increasing:
-        print(f"File {full_path} is not sorted")
-        # Check first if the values are already sorted
-        # Since all history files are supposed to be already sorted,
-        # we should always be able to avoid sorting
-        df.sort_index(inplace=True)
+    if set(df.index.names) != {None}:
+        df.reset_index(inplace=True)
+
+    for col in index_cols:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    df.set_index(index_cols, inplace=True)
 
     return df
