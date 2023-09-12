@@ -79,6 +79,11 @@ def worker_init(args: Args):
     solver = PySAT(args.solver)
     history = History.load(args.results_dir, load_step=True)
 
+    # Only keep the required columns (minimize memory usage)
+    history.step = history.step[["action_0", "action_1"]].copy()
+    for col in history.step.columns:
+        history.step[col] = pd.to_numeric(history.step[col], downcast="integer")
+
 
 def worker_solve(episode: int):
     graph = history.get_graph(episode)

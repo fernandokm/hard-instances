@@ -12,7 +12,7 @@ from generation.graph import SATGraph
 class History:
     directory: Path
     step: pd.DataFrame
-    rerun: pd.DataFrame
+    reruns: dict[str, pd.DataFrame]
     episode: pd.DataFrame
 
     def get_graph(
@@ -22,7 +22,7 @@ class History:
         max_steps: int = sys.maxsize,
     ) -> SATGraph:
         raw_template = self.episode.loc[(episode, eval_episode), "template"]
-        template = utils.parse_template(raw_template) # type: ignore
+        template = utils.parse_template(raw_template)  # type: ignore
         graph = SATGraph.from_template(template)
 
         actions = self.step.loc[
@@ -37,7 +37,9 @@ class History:
         return graph
 
     @staticmethod
-    def load(directory: str | Path, load_step: bool = False) -> "History":
+    def load(
+        directory: str | Path, load_step: bool = False, load_reruns: bool = False
+    ) -> "History":
         if not isinstance(directory, Path):
             directory = Path(directory)
 
@@ -64,13 +66,13 @@ class History:
             ]
             episode.loc[:, metric_cols] = last_step.loc[:, metric_cols]
 
-        try:
-            rerun = _read(directory / "rerun", index_cols=["episode", "run"])
-        except FileNotFoundError:
-            rerun = pd.DataFrame()
-
         if not load_step:
             step = pd.DataFrame(columns=step.columns)
+
+        reruns = {}
+        if load_reruns:
+            for rerun_dir in directory.glob("rerun*.*"):
+                reruns[rerun_dir.stem] = _read(rerun_dir, index_cols=["episode", "run"])
 
         # Update old column names:
         episode.rename(
@@ -83,7 +85,7 @@ class History:
         return History(
             directory=directory,
             step=step,
-            rerun=rerun,
+            reruns=reruns,
             episode=episode,
         )
 
