@@ -99,7 +99,9 @@ class Spinner(AbstractContextManager):
         self.processes: list[multiprocessing.Process] = []
         self.run_event = multiprocessing.Event()
         for _ in range(self.num_cpus):
-            p = multiprocessing.Process(target=Spinner.spin, args=(self.run_event,))
+            p = multiprocessing.Process(
+                target=Spinner.spin, args=(self.run_event,), daemon=True
+            )
             p.start()
             self.processes.append(p)
 
