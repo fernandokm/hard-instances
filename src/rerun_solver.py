@@ -50,7 +50,7 @@ def main():
 
     history = History.load(args.results_dir, load_step=True)
 
-    tasks = list(history.episode.index)
+    tasks = list(history.episode.index.unique("episode").sort_values())
     results = []
     with multiprocessing.Pool(args.num_cpus, worker_init, (args,)) as pool:
         with Spinner(args.noise_cpus) as spinner:
