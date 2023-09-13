@@ -71,7 +71,11 @@ class History:
 
         reruns = {}
         if load_reruns:
-            for rerun_dir in directory.glob("rerun*.*"):
+            rerun_dirs = {
+                *directory.glob("rerun*.parquet"),
+                *directory.glob("rerun*.csv"),
+            }
+            for rerun_dir in rerun_dirs:
                 reruns[rerun_dir.stem] = _read(rerun_dir, index_cols=["episode", "run"])
 
         # Update old column names:
