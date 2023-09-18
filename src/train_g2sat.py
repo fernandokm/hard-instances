@@ -45,7 +45,7 @@ class Args(argparse.Namespace):
     eval_files: list[Path]
     eval_repetitions: int
     eval_agg: str
-    reference_instance: Path | None
+    reference_instances: Path | None
     normalize_by_reference: bool
     checkpoint_freq: int | None
     metric: str
@@ -105,7 +105,7 @@ def parse_args() -> Args:
     )
     parser.add_argument("--eval_repetitions", type=int, default=-1)
     parser.add_argument("--eval_agg", choices=["mean", "median", "min"], default="")
-    parser.add_argument("--reference_instance", type=Path, default=None)
+    parser.add_argument("--reference_instances", type=Path, default=None)
     parser.add_argument("--normalize_by_reference", action="store_true")
     parser.add_argument("--checkpoint_freq", type=int, default=None)
     parser.add_argument(
@@ -169,8 +169,8 @@ def main():
         eval_templates += utils.parse_template_file(file)
 
     reference_instance = None
-    if args.reference_instance:
-        reference_instance = CNF(from_file=str(args.reference_instance)).clauses
+    if args.reference_instances:
+        reference_instance = utils.parse_instance_file(args.reference_instances)
     elif args.normalize_by_reference:
         print(
             "Error: --normalize_by_reference speccified without any reference instance"
@@ -186,7 +186,7 @@ def main():
         "num_sampled_pairs": args.num_sampled_pairs,
         "allow_overlaps": args.allow_overlaps,
         "sampling_method": args.sampling_method,
-        "reference_instance": reference_instance,
+        "reference_instances": reference_instance,
         "normalize_by_reference": args.normalize_by_reference,
     }
     env = G2SATEnv(

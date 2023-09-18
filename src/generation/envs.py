@@ -1,6 +1,7 @@
 import itertools
 import sys
 import time
+from collections import defaultdict
 from typing import Any, TypedDict
 
 import gymnasium as gym
@@ -35,7 +36,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         fixed_templates: list[npt.NDArray[np.int64]] | None = None,
         solve_repetitions: int = 1,
         solve_agg: str = "mean",
-        reference_instance: list[list[int]] | None = None,
+        reference_instances: list[list[list[int]]] | None = None,
         normalize_by_reference: bool = False,
     ) -> None:
         self.num_vars = num_vars
@@ -50,7 +51,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.allow_overlaps = allow_overlaps
         self.solve_repetitions = solve_repetitions
         self.solve_agg = solve_agg
-        self.reference_instance = reference_instance
+        self.reference_instances = reference_instances
         self.normalize_by_reference = normalize_by_reference
 
         self.fixed_templates = fixed_templates
@@ -123,13 +124,18 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
     def _get_metrics(self) -> dict[str, Any]:
         metrics = self._solve_instance(self.graph.to_clauses())
-        if self.reference_instance:
-            ref = self._solve_instance(self.reference_instance)
-            for k, v_ref in ref.items():
-                metrics[f"ref/{k}"] = v_ref
+        if self.reference_instances:
+            ref_lists = defaultdict(list)
+            for instance in self.reference_instances:
+                ref = self._solve_instance(instance)
+                for k, v_ref in ref.items():
+                    ref_lists[k].append(v_ref)
+            fn = getattr(np, self.solve_agg)
+            for k, v_refs in ref_lists.items():
+                metrics[f"ref/{k}"] = fn(v_refs)
                 if self.normalize_by_reference:
                     # Add epsilon to avoid divide-by-zero warnings
-                    metrics[k] /= v_ref + sys.float_info.epsilon
+                    metrics[k] /= metrics[f"ref/{k}"] + sys.float_info.epsilon
         return metrics
 
     def reset(

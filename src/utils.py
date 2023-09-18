@@ -49,3 +49,13 @@ def parse_template_file(file: Path) -> list[npt.NDArray[np.int64]]:
             if line:
                 templates.append(parse_template(line))
     return templates
+
+
+def parse_instance_file(file: Path) -> list[list[list[int]]]:
+    instances = []
+    with _open_and_decompress(file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                instances.append(json.loads(line))
+    return instances
