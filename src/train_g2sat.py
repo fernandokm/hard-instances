@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ from generation.envs import G2SATEnv
 from generation.generators import G2SATPolicy, ReinforceTrainer, callbacks
 from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
+from pysat.formula import CNF
 from solvers.pysat import PySAT
 from tensorboardX import SummaryWriter
 from torch import optim
@@ -42,6 +44,8 @@ class Args(argparse.Namespace):
     eval_files: list[Path]
     eval_repetitions: int
     eval_agg: str
+    reference_instance: Path | None
+    normalize_by_reference: bool
     checkpoint_freq: int | None
     metric: str
     seed: int
@@ -100,6 +104,8 @@ def parse_args() -> Args:
     )
     parser.add_argument("--eval_repetitions", type=int, default=-1)
     parser.add_argument("--eval_agg", choices=["mean", "median", "min"], default="")
+    parser.add_argument("--reference_instance", type=Path, default=None)
+    parser.add_argument("--normalize_by_reference", action="store_true")
     parser.add_argument("--checkpoint_freq", type=int, default=None)
     parser.add_argument(
         "--metric",
@@ -160,6 +166,15 @@ def main():
     for file in args.eval_files:
         eval_templates += utils.parse_template_file(file)
 
+    reference_instance = None
+    if args.reference_instance:
+        reference_instance = CNF(from_file=str(args.reference_instance)).clauses
+    elif args.normalize_by_reference:
+        print(
+            "Error: --normalize_by_reference speccified without any reference instance"
+        )
+        sys.exit(1)
+
     env_config = {
         "num_vars": args.num_vars,
         "num_clauses": args.num_clauses,
@@ -170,6 +185,8 @@ def main():
         "intermediate_rewards": args.intermediate_rewards,
         "allow_overlaps": args.allow_overlaps,
         "sampling_method": args.sampling_method,
+        "reference_instance": reference_instance,
+        "normalize_by_reference": args.normalize_by_reference,
     }
     env = G2SATEnv(
         **env_config,

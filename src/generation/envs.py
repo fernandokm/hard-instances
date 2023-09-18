@@ -1,4 +1,5 @@
 import itertools
+import sys
 import time
 from typing import Any, TypedDict
 
@@ -34,6 +35,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         fixed_templates: list[npt.NDArray[np.int64]] | None = None,
         solve_repetitions: int = 1,
         solve_agg: str = "mean",
+        reference_instance: list[list[int]] | None = None,
+        normalize_by_reference: bool = False,
     ) -> None:
         self.num_vars = num_vars
         self.num_clauses = num_clauses
@@ -47,6 +50,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.allow_overlaps = allow_overlaps
         self.solve_repetitions = solve_repetitions
         self.solve_agg = solve_agg
+        self.reference_instance = reference_instance
+        self.normalize_by_reference = normalize_by_reference
 
         self.fixed_templates = fixed_templates
         if fixed_templates is None:
@@ -89,11 +94,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         truncated = False
 
         if terminated or self.intermediate_rewards:
-            metrics = self.solver.solve_instance_agg(
-                self.graph.to_clauses(),
-                repetitions=self.solve_repetitions,
-                agg_fn=self.solve_agg,
-            )
+            metrics = self._get_metrics()
             reward = metrics[self.reward_metric]
             if not terminated:
                 reward *= self.intermediate_rewards_coeff
@@ -112,6 +113,24 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         }
 
         return obs, reward, terminated, truncated, info
+
+    def _solve_instance(self, instance: list[list[int]]) -> dict[str, Any]:
+        return self.solver.solve_instance_agg(
+            instance,
+            repetitions=self.solve_repetitions,
+            agg_fn=self.solve_agg,
+        )
+
+    def _get_metrics(self) -> dict[str, Any]:
+        metrics = self._solve_instance(self.graph.to_clauses())
+        if self.reference_instance:
+            ref = self._solve_instance(self.reference_instance)
+            for k, v_ref in ref.items():
+                metrics[f"ref/{k}"] = v_ref
+                if self.normalize_by_reference:
+                    # Add epsilon to avoid divide-by-zero warnings
+                    metrics[k] /= v_ref + sys.float_info.epsilon
+        return metrics
 
     def reset(
         self,
