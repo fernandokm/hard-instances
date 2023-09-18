@@ -184,7 +184,6 @@ def main():
         "reward_metric": args.metric,
         "compress_observations": args.compress_observations,
         "num_sampled_pairs": args.num_sampled_pairs,
-        "intermediate_rewards": args.intermediate_rewards,
         "allow_overlaps": args.allow_overlaps,
         "sampling_method": args.sampling_method,
         "reference_instance": reference_instance,
@@ -192,6 +191,7 @@ def main():
     }
     env = G2SATEnv(
         **env_config,
+        intermediate_rewards=args.intermediate_rewards,
         fixed_templates=fixed_templates,
         solve_repetitions=args.solve_repetitions,
         solve_agg=args.solve_agg,
