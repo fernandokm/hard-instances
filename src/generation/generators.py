@@ -122,7 +122,6 @@ class ReinforceTrainer:
         self.callback = callbacks.setup_callbacks(
             callbacks_list,
             num_episodes,
-            default_tqdm_metrics=["loss", "return/shaped", "return/original"],
         )
 
         self.train_rng, eval_rng = np.random.default_rng(seed).spawn(2)

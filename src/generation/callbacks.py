@@ -102,7 +102,7 @@ class Tqdm(Callback):
         **tqdm_kwargs,
     ) -> None:
         if metrics is None:
-            metrics = ["loss"]
+            metrics = []
         tqdm_kwargs.setdefault("desc", "Training")
         tqdm_kwargs.setdefault("unit", "episodes")
         self.pbar = tqdm(total=num_episodes, **tqdm_kwargs)
@@ -322,7 +322,7 @@ class ModelCheckpoint(Callback):
 def setup_callbacks(
     callbacks: list[Callback] | None,
     num_episodes: int,
-    default_tqdm_metrics: list[str],
+    default_tqdm_metrics: list[str] | None = None,
     with_timing: bool = True,
 ) -> Callback:
     cb = CallbackList(callbacks or [])
