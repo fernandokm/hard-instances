@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -154,6 +155,7 @@ def main():
         *[f"{k} = {getattr(args, k)}" for k in vars(args)],
         sep="\n  ",
     )
+    print("Running on:", socket.gethostname())
 
     tg.seed_everything(args.seed)
 
