@@ -1,11 +1,17 @@
+import copy
 import csv
 import os
+import pickle
 import time
 from collections import defaultdict
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
+import torch
 from tensorboardX import SummaryWriter
+from torch import nn, optim
 from tqdm.auto import tqdm
 
 
@@ -262,6 +268,57 @@ class _AutoDictWriter:
         self.inner.writerows(rowdicts)
 
 
+class ModelCheckpoint(Callback):
+    def __init__(
+        self,
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        freq: int,
+        hparams: dict[str, Any],
+        outdir: str | Path,
+    ) -> None:
+        hparams = copy.deepcopy(hparams)
+        if not _picklable(hparams):
+            msg = f"Hparams object not picklable: {hparams}"
+            raise ValueError(msg)
+
+        self.model = model
+        self.optimizer = optimizer
+        self.checkpoint_freq = freq
+        self.hparams = hparams
+        self.outdir = outdir if isinstance(outdir, Path) else Path(outdir)
+        self.outdir.mkdir(exist_ok=True, parents=True)
+
+        self._evaluation = False
+        self._episode = 0
+        self._latest_checkpoint = None
+
+    def on_episode_start(self, evaluation: bool = False) -> None:
+        self._evaluation = evaluation
+        if not evaluation and self._episode % self.checkpoint_freq == 0:
+            self.save_checkpoint()
+
+    def on_episode_end(self, info: dict) -> None:
+        if not self._evaluation:
+            self._episode += 1
+
+    def save_checkpoint(self):
+        if self._latest_checkpoint == self._episode:
+            return
+        self._latest_checkpoint = self._episode
+        data = {
+            "episode": self._episode,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            **self.hparams,
+        }
+        ckpt_file = self.outdir / f"{self._episode}.pt"
+        torch.save(data, ckpt_file)
+
+    def close(self):
+        self.save_checkpoint()
+
+
 def setup_callbacks(
     callbacks: list[Callback] | None,
     num_episodes: int,
@@ -297,3 +354,11 @@ def _flatten_dict(
         else:
             out[k] = v
     return out
+
+
+def _picklable(obj) -> bool:
+    try:
+        pickle.dumps(obj)
+        return True
+    except pickle.PicklingError:
+        return False

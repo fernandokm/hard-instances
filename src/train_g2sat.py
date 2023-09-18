@@ -42,6 +42,7 @@ class Args(argparse.Namespace):
     eval_files: list[Path]
     eval_repetitions: int
     eval_agg: str
+    checkpoint_freq: int | None
     metric: str
     seed: int
     tensorboard: bool
@@ -99,6 +100,7 @@ def parse_args() -> Args:
     )
     parser.add_argument("--eval_repetitions", type=int, default=-1)
     parser.add_argument("--eval_agg", choices=["mean", "median", "min"], default="")
+    parser.add_argument("--checkpoint_freq", type=int, default=None)
     parser.add_argument(
         "--metric",
         choices=["time_cpu", "decisions", "conflicts", "restarts", "propagations"],
@@ -192,6 +194,7 @@ def main():
         num_embeddings=3 if env.compress_observations else None,
         num_layers=args.num_layers,
     )
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     if args.gpu:
         model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model)
@@ -200,10 +203,20 @@ def main():
     if args.tensorboard:
         writer = SummaryWriter(str(logdir))
         cbs.append(callbacks.Tensorboard(writer))
+    if args.checkpoint_freq:
+        cbs.append(
+            callbacks.ModelCheckpoint(
+                model,
+                optimizer,
+                args.checkpoint_freq,
+                vars(args),
+                logdir / "checkpoints",
+            )
+        )
 
     trainer = ReinforceTrainer(
         policy,
-        optimizer=optim.AdamW(model.parameters(), lr=args.lr),
+        optimizer=optimizer,
         num_episodes=args.num_episodes,
         gamma=args.gamma,
         eval_env=eval_env,
