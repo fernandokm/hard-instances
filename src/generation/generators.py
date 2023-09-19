@@ -10,6 +10,7 @@ from gymnasium.spaces import GraphInstance
 from torch import nn
 from torch.distributions import Categorical
 from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
 from utils import Seed
 
 from .envs import G2SATEnv, G2SATObservation
@@ -102,6 +103,7 @@ class ReinforceTrainer:
         self,
         policy: G2SATPolicy,
         optimizer: Optimizer,
+        scheduler: LRScheduler | None = None,
         num_episodes: int = 50_000,
         gamma: float = 0.99,
         eval_env: G2SATEnv | None = None,
@@ -113,6 +115,7 @@ class ReinforceTrainer:
         self.policy = policy
         self.env = policy.env
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.num_episodes = num_episodes
         self.gamma = gamma
         self.eval_env = eval_env
@@ -209,6 +212,13 @@ class ReinforceTrainer:
             self.optimizer.step()
             t1 = time.monotonic()
             episode_info["timing"]["train"] = t1 - t0
+
+        if self.scheduler:
+            episode_info["lr"] = self.scheduler.get_last_lr()
+            if isinstance(episode_info["lr"], list):
+                episode_info["lr"] = episode_info["lr"][0]
+            if not evaluation:
+                self.scheduler.step()
 
         episode_info |= {
             "loss": loss.item(),

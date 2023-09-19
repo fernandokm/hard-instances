@@ -31,6 +31,7 @@ class Args(argparse.Namespace):
     output_dim: int
     gamma: float
     lr: float
+    lr_decay: float
     num_episodes: int
     num_sampled_pairs: int
     solve_repetitions: int
@@ -84,7 +85,8 @@ def parse_args() -> Args:
     parser.add_argument("--output_dim", default=32, type=int)
     parser.add_argument("--gamma", default=0.999, type=float)
 
-    parser.add_argument("--lr", dest="lr", default=1e-3, type=float)
+    parser.add_argument("--lr", default=1e-3, type=float)
+    parser.add_argument("--lr_decay", default=1, type=float)
     parser.add_argument("--num_episodes", default=20_000, type=int)
     parser.add_argument("--num_sampled_pairs", default=2_000, type=int)
     parser.add_argument("--solve_repetitions", default=1, type=int)
@@ -214,6 +216,7 @@ def main():
         num_layers=args.num_layers,
     )
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.lr_decay)
     if args.gpu:
         model = model.to(args.gpu_device)
     policy = G2SATPolicy(env, model)
@@ -236,6 +239,7 @@ def main():
     trainer = ReinforceTrainer(
         policy,
         optimizer=optimizer,
+        scheduler=scheduler,
         num_episodes=args.num_episodes,
         gamma=args.gamma,
         eval_env=eval_env,
