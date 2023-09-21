@@ -5,7 +5,7 @@ import gzip
 from pathlib import Path
 
 import numpy as np
-from pysat.formula import CNF
+import utils
 from tqdm.auto import trange
 
 
@@ -44,22 +44,10 @@ def main():
 
     with gzip.open(out_file, mode="wt") as f:
         for _ in trange(args.num_instances, unit="templates"):
-            instance = random_k_sat(
+            instance = utils.random_k_sat(
                 rng, n_vars=args.num_vars, n_clauses=args.num_clauses, k=args.k
             )
             print(instance.clauses, file=f)
-
-
-def random_k_sat(
-    rng: np.random.Generator,
-    n_vars: int,
-    n_clauses: int,
-    k: int = 3,
-) -> CNF:
-    variables = rng.choice(1 + np.arange(n_vars), size=(n_clauses, k))
-    polarities = rng.choice([1, -1], size=(n_clauses, k))
-    literals = variables * polarities
-    return CNF(from_clauses=literals.tolist())
 
 
 if __name__ == "__main__":

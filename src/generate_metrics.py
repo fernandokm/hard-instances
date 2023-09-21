@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from pysat.formula import CNF
+import utils
 from solvers.pysat import PySAT
 from tqdm.auto import tqdm, trange
 
@@ -46,7 +47,7 @@ def main():
         if file.exists():
             skipped += 1
         else:
-            instance = random_k_sat(
+            instance = utils.random_k_sat(
                 rng, n_vars=args.num_vars, n_clauses=args.num_clauses, k=3
             )
             instance.to_file(str(file))
@@ -69,18 +70,6 @@ def main():
 
     df = pd.DataFrame(results)
     df.to_csv(str(args.outdir / "metrics.csv"), index=False)
-
-
-def random_k_sat(
-    rng: np.random.Generator,
-    n_vars: int,
-    n_clauses: int,
-    k: int = 3,
-) -> CNF:
-    variables = rng.choice(1 + np.arange(n_vars), size=(n_clauses, k))
-    polarities = rng.choice([1, -1], size=(n_clauses, k))
-    literals = variables * polarities
-    return CNF(from_clauses=literals.tolist())
 
 
 def solve(data: tuple[str, int, int]):

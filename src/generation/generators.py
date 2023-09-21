@@ -18,9 +18,15 @@ from .graph import SATGraph
 
 
 class G2SATPolicy:
-    def __init__(self, env: G2SATEnv, model: nn.Module) -> None:
-        self.env = env
+    def __init__(
+        self,
+        model: nn.Module,
+        num_sampled_pairs: int = 2_000,
+        compress_observations: bool = True,
+    ) -> None:
         self.model = model
+        self.num_sampled_pairs = num_sampled_pairs
+        self.compress_observations = compress_observations
 
     @property
     def device(self):
@@ -28,20 +34,24 @@ class G2SATPolicy:
             return param.device
 
     def generate(
-        self, template: npt.NDArray[np.int64] | None = None, seed: Seed = None
+        self,
+        template: npt.NDArray[np.int64],
+        num_sampled_pairs: int | None = None,
+        compress_observations: bool | None = None,
+        seed: Seed = None,
     ) -> SATGraph:
-        if template is None:
-            template = SATGraph.sample_template(
-                self.env.num_vars, 3 * self.env.num_clauses, seed=seed
-            )
+        if num_sampled_pairs is None:
+            num_sampled_pairs = self.num_sampled_pairs
+        if compress_observations is None:
+            compress_observations = self.compress_observations
 
-        g = SATGraph.from_template(template)
+        g = SATGraph.from_template(template, seed=seed)
         while not g.is_3sat():
-            pairs = g.sample_valid_merges(self.env.num_sampled_pairs)
+            pairs = g.sample_valid_merges(num_sampled_pairs)
             if not pairs:
                 break
             logits = self.predict_logits(
-                g.to_graph_instance(),
+                g.to_graph_instance(compress_observations),
                 torch.as_tensor(np.array(pairs), device=self.device),
             )
             i, j = pairs[torch.argmax(logits)]
@@ -101,6 +111,7 @@ class G2SATPolicy:
 class ReinforceTrainer:
     def __init__(
         self,
+        env: G2SATEnv,
         policy: G2SATPolicy,
         optimizer: Optimizer,
         scheduler: LRScheduler | None = None,
@@ -113,7 +124,7 @@ class ReinforceTrainer:
         seed: Seed = None,
     ):
         self.policy = policy
-        self.env = policy.env
+        self.env = env
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.num_episodes = num_episodes

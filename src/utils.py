@@ -6,6 +6,7 @@ from typing import TextIO
 
 import numpy as np
 import numpy.typing as npt
+from pysat.formula import CNF
 
 Seed = int | np.random.Generator | None
 
@@ -59,3 +60,15 @@ def parse_instance_file(file: Path) -> list[list[list[int]]]:
             if line:
                 instances.append(json.loads(line))
     return instances
+
+
+def random_k_sat(
+    rng: np.random.Generator,
+    n_vars: int,
+    n_clauses: int,
+    k: int = 3,
+) -> CNF:
+    variables = rng.choice(1 + np.arange(n_vars), size=(n_clauses, k))
+    polarities = rng.choice([1, -1], size=(n_clauses, k))
+    literals = variables * polarities
+    return CNF(from_clauses=literals.tolist())

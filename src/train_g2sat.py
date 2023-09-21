@@ -14,7 +14,6 @@ from generation.envs import G2SATEnv
 from generation.generators import G2SATPolicy, ReinforceTrainer, callbacks
 from generation.graph import SamplingMethod
 from gnn_models.sage import SAGE
-from pysat.formula import CNF
 from solvers.pysat import PySAT
 from tensorboardX import SummaryWriter
 from torch import optim
@@ -219,7 +218,7 @@ def main():
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.lr_decay)
     if args.gpu:
         model = model.to(args.gpu_device)
-    policy = G2SATPolicy(env, model)
+    policy = G2SATPolicy(model, args.num_sampled_pairs, args.compress_observations)
 
     cbs: list[callbacks.Callback] = [callbacks.HistoryWriter(str(logdir))]
     if args.tensorboard:
@@ -237,6 +236,7 @@ def main():
         )
 
     trainer = ReinforceTrainer(
+        env,
         policy,
         optimizer=optimizer,
         scheduler=scheduler,
