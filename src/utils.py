@@ -1,3 +1,4 @@
+import copy
 import gzip
 import json
 import sys
@@ -8,7 +9,9 @@ import numpy as np
 import numpy.typing as npt
 from pysat.formula import CNF
 
-Seed = int | np.random.Generator | None
+Seed = (
+    int | np.random.SeedSequence | np.random.BitGenerator | np.random.Generator | None
+)
 
 
 class Tee:
@@ -29,6 +32,32 @@ class Tee:
         f = open(filename, mode)
         sys.stdout = Tee(sys.stdout, f)
         sys.stderr = Tee(sys.stderr, f)
+
+
+class RngFactory:
+    # See https://github.com/numpy/numpy/issues/24086#issuecomment-1614754923
+    # for details
+
+    def __init__(self, seed: Seed) -> None:
+        if isinstance(seed, np.random.Generator):
+            seed = seed.bit_generator
+
+        self.seed_seq: np.random.SeedSequence
+        if isinstance(seed, np.random.BitGenerator):
+            self.seed_seq = copy.deepcopy(seed.seed_seq)  # type: ignore
+            self.bit_generator_type = type(seed)
+        elif isinstance(seed, np.random.SeedSequence):
+            self.seed_seq = copy.deepcopy(seed)
+            self.bit_generator_type = None
+        else:
+            self.seed_seq = np.random.SeedSequence(seed)
+            self.bit_generator_type = None
+
+    def make(self) -> np.random.Generator:
+        seed = copy.deepcopy(self.seed_seq)
+        if self.bit_generator_type:
+            seed = self.bit_generator_type(seed)
+        return np.random.default_rng(seed)
 
 
 def parse_template(raw_template: str) -> npt.NDArray[np.int64]:

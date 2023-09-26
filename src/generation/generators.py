@@ -1,4 +1,3 @@
-import copy
 import time
 from typing import Literal
 
@@ -11,7 +10,7 @@ from torch import nn
 from torch.distributions import Categorical
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from utils import Seed
+from utils import RngFactory, Seed
 
 from .envs import G2SATEnv, G2SATObservation
 from .graph import SATGraph
@@ -141,13 +140,7 @@ class ReinforceTrainer:
         self.train_rng, eval_rng = np.random.default_rng(seed).spawn(2)
 
         # Re-use the same rng at every eval loop
-        # See https://github.com/numpy/numpy/issues/24086#issuecomment-1614754923
-        # for details
-        eval_seed_seq = eval_rng.bit_generator.seed_seq
-        bit_generator_type = type(eval_rng.bit_generator)
-        self.build_eval_rng = lambda: np.random.Generator(
-            bit_generator_type(copy.deepcopy(eval_seed_seq))  # type: ignore
-        )
+        self.eval_rng_factory = RngFactory(eval_rng)
 
     def train(self):
         for episode in range(self.num_episodes):
@@ -167,7 +160,9 @@ class ReinforceTrainer:
             num_episodes = 1
 
         for _ in range(num_episodes):
-            self.run_episode(self.eval_env, self.build_eval_rng(), evaluation=True)
+            self.run_episode(
+                self.eval_env, self.eval_rng_factory.make(), evaluation=True
+            )
 
     def run_episode(
         self,
