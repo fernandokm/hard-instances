@@ -6,8 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from pysat.formula import CNF
 import utils
+from pysat.formula import CNF
 from solvers.pysat import PySAT
 from tqdm.auto import tqdm, trange
 

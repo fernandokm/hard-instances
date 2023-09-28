@@ -1,5 +1,7 @@
 import queue
+import random
 
+import pandas as pd
 import torch
 import utils
 from generation.generators import G2SATPolicy
@@ -10,7 +12,7 @@ from torch import multiprocessing
 from tqdm.auto import tqdm
 
 
-def load_policy(path: str) -> G2SATPolicy:
+def load_policy(path: str, device: str | None = None) -> G2SATPolicy:
     data = torch.load(path)
 
     model = SAGE(
@@ -19,7 +21,9 @@ def load_policy(path: str) -> G2SATPolicy:
         hidden_dim=data["hidden_dim"],
         output_dim=data["output_dim"],
         num_layers=data["num_layers"],
-    ).to("cuda")
+    )
+    if device:
+        model = model.to(device)
     model.load_state_dict(data["model_state_dict"])
     return G2SATPolicy(
         model,
@@ -45,7 +49,7 @@ def generate_and_eval(
 ):
     instance = generate(policy, num_vars, alpha, seed=seed)
     r = solver.solve_instance(instance.to_clauses())
-    r["num_vars"] = alpha
+    r["num_vars"] = num_vars
     r["alpha"] = alpha
     return r
 
@@ -61,12 +65,13 @@ def _handle_eval_queue(
     while True:
         # print(f"[{worker_idx}] Looking (size={in_queue.qsize()})", flush=True)
         try:
-            num_vars, alpha, seed = in_queue.get_nowait()
+            num_vars, alpha, run, seed = in_queue.get_nowait()
         except queue.Empty:
             # print(f"[{worker_idx}] Done", flush=True)
             return
         # print(f"[{worker_idx}] Got task ({num_vars}, {alpha})", flush=True)
         r = generate_and_eval(policy, solver, num_vars, alpha, seed)
+        r["run"] = run
         out_queue.put(r)
 
 
@@ -75,21 +80,28 @@ def generate_and_eval_par(
     solver: Solver,
     num_vars: list[int],
     alphas: list[float],
-    repeats: int,
-    num_cpus: int,
-    seed: utils.Seed,
-):
+    runs: int,
+    num_cpus: int = 1,
+    seed: utils.Seed = None,
+    desc="generating and solving instances",
+) -> pd.DataFrame:
     rng_factory = utils.RngFactory(seed)
     spawn_ctx = multiprocessing.get_context("spawn")
-    in_queue = spawn_ctx.Queue()
-    out_queue = spawn_ctx.Queue()
+    tasks = []
     for n in num_vars:
         for a in alphas:
             # Use the same sequence of rngs for each (n,a) pair
             rng = rng_factory.make()
-            for _ in range(repeats):
-                in_queue.put_nowait((n, a, rng.spawn(1)[0]))
-    in_queue.close()
+            for run in range(runs):
+                tasks.append((n, a, run, rng.spawn(1)[0]))
+
+    # We shuffle the tasks to ensure that the harder tasks (those with larger n,a)
+    # are not all at the end of the tasks (this gives us better tqdm time estimates)
+    random.shuffle(tasks)
+    in_queue = spawn_ctx.Queue()
+    out_queue = spawn_ctx.Queue()
+    for t in tasks:
+        in_queue.put_nowait(t)
 
     results = []
     num_tasks = in_queue.qsize()
@@ -99,6 +111,7 @@ def generate_and_eval_par(
         nprocs=num_cpus,
         join=False,
     )
+    in_queue.close()
     pbar = tqdm(total=num_tasks, desc="generating and solving instances")
     while pbar.n < pbar.total:
         r = out_queue.get()
@@ -107,4 +120,4 @@ def generate_and_eval_par(
     pbar.refresh()
 
     ctx.join()
-    return results
+    return pd.DataFrame(results).sort_values(["num_vars", "alpha", "run"])
