@@ -14,6 +14,7 @@ class History:
     step: pd.DataFrame
     reruns: dict[str, pd.DataFrame]
     episode: pd.DataFrame
+    evaluation: pd.DataFrame
 
     def get_graph(
         self,
@@ -38,7 +39,10 @@ class History:
 
     @staticmethod
     def load(
-        directory: str | Path, load_step: bool = False, load_reruns: bool = False
+        directory: str | Path,
+        load_step: bool = False,
+        load_reruns: bool = False,
+        load_eval: bool = False,
     ) -> "History":
         if not isinstance(directory, Path):
             directory = Path(directory)
@@ -78,6 +82,11 @@ class History:
             for rerun_dir in rerun_dirs:
                 reruns[rerun_dir.stem] = _read(rerun_dir, index_cols=["episode", "run"])
 
+        if load_eval:
+            eval_ = _read(directory / "eval", index_cols=[])
+        else:
+            eval_ = pd.DataFrame()
+
         # Update old column names:
         episode.rename(
             columns={"timing/logger": "timing/callbacks"}, inplace=True, errors="ignore"
@@ -91,6 +100,7 @@ class History:
             step=step,
             reruns=reruns,
             episode=episode,
+            evaluation=eval_,
         )
 
 
@@ -105,6 +115,9 @@ def _read(path: Path, index_cols: list[str]):
         else:
             msg = str(path.with_suffix(".{parquet,csv}"))
             raise FileNotFoundError(msg)
+
+    if not index_cols:
+        return df
 
     if set(df.index.names) != {None}:
         df.reset_index(inplace=True)
