@@ -20,7 +20,7 @@ class Args(argparse.Namespace):
     checkpoints: list[int]
     runs: int
     num_sampled_pairs: list[int]
-    solver: str
+    solvers: list[str]
     num_cpus: int
     seed: int
     device: str | None
@@ -46,7 +46,7 @@ def parse_args() -> Args:
     )
     parser.add_argument("--runs", type=int, default=100)
     parser.add_argument("--num_sampled_pairs", type=int, action="append")
-    parser.add_argument("--solver", type=str, default="minisat22")
+    parser.add_argument("--solver", type=str, action="append", dest="solvers")
     parser.add_argument("--num_cpus", type=int, default=1)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default=None)
@@ -76,8 +76,8 @@ def main():
         devices = [args.device]
 
     solvers: list[Solver]
-    if "," in args.solver:
-        solvers = [PySAT(name.strip()) for name in args.solver.split(",")]
+    if args.solvers:
+        solvers = [PySAT(name) for name in args.solvers]
     else:
         solvers = [PySAT("m22")]
 
