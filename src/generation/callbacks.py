@@ -105,6 +105,7 @@ class Tqdm(Callback):
             metrics = []
         tqdm_kwargs.setdefault("desc", "Training")
         tqdm_kwargs.setdefault("unit", "episodes")
+        tqdm_kwargs.setdefault("smoothing", 0.0002)
         self.pbar = tqdm(total=num_episodes, **tqdm_kwargs)
         self.metrics = metrics.copy()
         self._postfix = {}
