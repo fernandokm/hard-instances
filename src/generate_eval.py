@@ -32,7 +32,13 @@ def parse_args() -> Args:
     parser.add_argument("results_dir", type=Path)
     parser.add_argument("-o", "--output", type=str, default="eval.parquet")
     parser.add_argument(
-        "-c", "--checkpoint", type=int, action="append", dest="checkpoints", default=[]
+        "-c",
+        "--checkpoint",
+        type=int,
+        action="append",
+        dest="checkpoints",
+        required=True,
+        default=[],
     )
     parser.add_argument("-n", "--num_vars", type=int, action="append", default=[])
     parser.add_argument(
