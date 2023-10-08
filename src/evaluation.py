@@ -1,6 +1,8 @@
 import queue
 import random
+from typing import Any, Iterable
 
+import numpy as np
 import pandas as pd
 import torch
 import utils
@@ -42,42 +44,44 @@ def generate(
 
 def generate_and_eval(
     policy: G2SATPolicy,
-    solver: Solver,
+    solvers: list[Solver],
     num_vars: int,
     alpha: float,
     seed: utils.Seed = None,
-):
+) -> Iterable[dict[str, Any]]:
     instance = generate(policy, num_vars, alpha, seed=seed)
-    r = solver.solve_instance(instance.to_clauses())
-    r["num_vars"] = num_vars
-    r["alpha"] = alpha
-    return r
+    clauses = instance.to_clauses()
+    for solver in solvers:
+        r = solver.solve_instance(clauses)
+        r["num_vars"] = num_vars
+        r["alpha"] = alpha
+        r["solver"] = solver.name
+        r["num_sampled_pairs"] = policy.num_sampled_pairs
+        yield r
 
 
 def _handle_eval_queue(
     worker_idx: int,
-    policy: G2SATPolicy,
-    solver: Solver,
+    policies: list[G2SATPolicy],
+    solvers: list[Solver],
     in_queue: multiprocessing.Queue,
     out_queue: multiprocessing.Queue,
 ) -> None:
-    # print(f"[{worker_idx}] Start", flush=True)
+    policy = policies[worker_idx % len(policies)]
+    # policy.num_sampled_pairs = 2_000
     while True:
-        # print(f"[{worker_idx}] Looking (size={in_queue.qsize()})", flush=True)
         try:
             num_vars, alpha, run, seed = in_queue.get_nowait()
         except queue.Empty:
-            # print(f"[{worker_idx}] Done", flush=True)
             return
-        # print(f"[{worker_idx}] Got task ({num_vars}, {alpha})", flush=True)
-        r = generate_and_eval(policy, solver, num_vars, alpha, seed)
-        r["run"] = run
-        out_queue.put(r)
+        for r in generate_and_eval(policy, solvers, num_vars, alpha, seed):
+            r["run"] = run
+            out_queue.put(r)
 
 
 def generate_and_eval_par(
-    policy: G2SATPolicy,
-    solver: Solver,
+    policies: list[G2SATPolicy],
+    solvers: list[Solver],
     num_vars: list[int],
     alphas: list[float],
     runs: int,
@@ -107,17 +111,17 @@ def generate_and_eval_par(
     num_tasks = in_queue.qsize()
     ctx = multiprocessing.spawn(
         _handle_eval_queue,
-        (policy, solver, in_queue, out_queue),
+        (policies, solvers, in_queue, out_queue),
         nprocs=num_cpus,
         join=False,
     )
     in_queue.close()
-    pbar = tqdm(total=num_tasks, desc="generating and solving instances")
+    pbar = tqdm(total=num_tasks * len(solvers), desc=desc, smoothing=0.005)
     while pbar.n < pbar.total:
         r = out_queue.get()
         results.append(r)
         pbar.update()
-    pbar.refresh()
+    pbar.close()
 
     ctx.join()
     return pd.DataFrame(results).sort_values(["num_vars", "alpha", "run"])

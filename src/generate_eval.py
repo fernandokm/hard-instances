@@ -2,11 +2,14 @@
 
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import evaluation
 import pandas as pd
 from solvers.pysat import PySAT
-from tqdm.auto import tqdm
+
+if TYPE_CHECKING:
+    from solvers.base import Solver
 
 
 class Args(argparse.Namespace):
@@ -16,9 +19,12 @@ class Args(argparse.Namespace):
     alphas: list[float]
     checkpoints: list[int]
     runs: int
+    num_sampled_pairs: list[int]
+    solver: str
     num_cpus: int
     seed: int
     device: str | None
+    force: bool
 
 
 def parse_args() -> Args:
@@ -33,9 +39,13 @@ def parse_args() -> Args:
         "-a", "--alpha", type=float, action="append", dest="alphas", default=[]
     )
     parser.add_argument("--runs", type=int, default=100)
+    parser.add_argument("--num_sampled_pairs", type=int, action="append")
+    parser.add_argument("--solver", type=str, default="minisat22")
     parser.add_argument("--num_cpus", type=int, default=1)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("-f", "--force", action="store_true")
+
     args = parser.parse_args(namespace=Args())
 
     if not args.num_vars:
@@ -49,32 +59,50 @@ def parse_args() -> Args:
 def main():
     args = parse_args()
     outfile = args.results_dir / args.output
-    if outfile.exists() and not args.force:
-        print(f'Output file "{outfile}" exists, use --force to overwrite it')
+    if outfile.exists() and not (args.force or args.append):
+        print(f'Output file "{outfile}" exists, use --force to run anyway')
         return
 
     results = []
-    for ckpt in tqdm(args.checkpoints, desc="checkpoints", position=1):
+    if args.device is not None and "," in args.device:
+        devices = [d.strip() for d in args.device.split(",")]
+    else:
+        devices = [args.device]
+
+    solvers: list[Solver]
+    if "," in args.solver:
+        solvers = [PySAT(name.strip()) for name in args.solver.split(",")]
+    else:
+        solvers = [PySAT("m22")]
+
+    for ckpt in args.checkpoints:
         model_path = args.results_dir / f"checkpoints/{ckpt}.pt"
-        policy = evaluation.load_policy(str(model_path), args.device)
-        r = evaluation.generate_and_eval_par(
-            policy,
-            PySAT("m22"),
-            args.num_vars,
-            args.alphas,
-            args.runs,
-            args.num_cpus,
-            args.seed,
-            desc=f"checkpoint={ckpt}",
-        )
-        r["episode"] = ckpt
-        results.append(r)
+        policies = [evaluation.load_policy(str(model_path), device=d) for d in devices]
+        if not args.num_sampled_pairs:
+            args.num_sampled_pairs = [policies[0].num_sampled_pairs]
+
+        for n in args.num_sampled_pairs:
+            for p in policies:
+                p.num_sampled_pairs = n
+
+            r = evaluation.generate_and_eval_par(
+                policies,
+                solvers,
+                args.num_vars,
+                args.alphas,
+                args.runs,
+                args.num_cpus,
+                args.seed,
+                desc=f"checkpoint={ckpt}, num_sampled_pairs={n}",
+            )
+            r["episode"] = ckpt
+            results.append(r)
 
     results = pd.concat(results)
     if outfile.suffix.lower() == ".parquet":
         results.to_parquet(outfile)
     else:
-        results.to_csv(outfile)
+        results.to_csv(outfile, index=False)
 
 
 if __name__ == "__main__":

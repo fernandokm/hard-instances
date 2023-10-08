@@ -83,7 +83,7 @@ class History:
                 reruns[rerun_dir.stem] = _read(rerun_dir, index_cols=["episode", "run"])
 
         if load_eval:
-            eval_ = _read(directory / "eval", index_cols=[])
+            eval_ = _read(directory / "eval", index_cols=[], allow_missing=True)
         else:
             eval_ = pd.DataFrame()
 
@@ -104,7 +104,7 @@ class History:
         )
 
 
-def _read(path: Path, index_cols: list[str]):
+def _read(path: Path, index_cols: list[str], allow_missing: bool=False):
     full_path = path.with_suffix(".parquet")
     if full_path.exists():
         df = pd.read_parquet(full_path)
@@ -112,6 +112,8 @@ def _read(path: Path, index_cols: list[str]):
         full_path = path.with_suffix(".csv")
         if full_path.exists():
             df = pd.read_csv(full_path)
+        elif allow_missing:
+            return pd.DataFrame()
         else:
             msg = str(path.with_suffix(".{parquet,csv}"))
             raise FileNotFoundError(msg)
