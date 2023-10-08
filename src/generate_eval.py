@@ -65,7 +65,7 @@ def parse_args() -> Args:
 def main():
     args = parse_args()
     outfile = args.results_dir / args.output
-    if outfile.exists() and not (args.force or args.append):
+    if outfile.exists() and not args.force:
         print(f'Output file "{outfile}" exists, use --force to run anyway')
         return
 
