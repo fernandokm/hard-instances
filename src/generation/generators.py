@@ -22,10 +22,12 @@ class G2SATPolicy:
         model: nn.Module,
         num_sampled_pairs: int = 2_000,
         compress_observations: bool = True,
+        allow_overlaps: bool = False,
     ) -> None:
         self.model = model
         self.num_sampled_pairs = num_sampled_pairs
         self.compress_observations = compress_observations
+        self.allow_overlaps = allow_overlaps
 
     @property
     def device(self):
@@ -37,14 +39,21 @@ class G2SATPolicy:
         template: npt.NDArray[np.int64],
         num_sampled_pairs: int | None = None,
         compress_observations: bool | None = None,
+        allow_overlaps: bool | None = None,
         seed: Seed = None,
     ) -> SATGraph:
         if num_sampled_pairs is None:
             num_sampled_pairs = self.num_sampled_pairs
         if compress_observations is None:
             compress_observations = self.compress_observations
+        if allow_overlaps is None:
+            allow_overlaps = self.allow_overlaps
 
-        g = SATGraph.from_template(template, seed=seed)
+        g = SATGraph.from_template(
+            template,
+            allow_overlaps=allow_overlaps,
+            seed=seed,
+        )
         while not g.is_3sat():
             pairs = g.sample_valid_merges(num_sampled_pairs)
             if not pairs:

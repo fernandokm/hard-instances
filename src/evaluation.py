@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 
 def load_policy(path: str, device: str | None = None) -> G2SATPolicy:
-    data = torch.load(path)
+    data = torch.load(path, map_location=device)
 
     model = SAGE(
         input_dim=3,
@@ -33,6 +33,7 @@ def load_policy(path: str, device: str | None = None) -> G2SATPolicy:
         model,
         num_sampled_pairs=data["num_sampled_pairs"],
         compress_observations=data["compress_observations"],
+        allow_overlaps=data["allow_overlaps"]
     )
 
 
