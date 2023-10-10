@@ -36,7 +36,7 @@ class G2SATPolicy:
 
     def generate(
         self,
-        template: npt.NDArray[np.int64],
+        template: npt.NDArray[np.int64] | list[list[int]] | SATGraph,
         num_sampled_pairs: int | None = None,
         compress_observations: bool | None = None,
         allow_overlaps: bool | None = None,
@@ -49,11 +49,20 @@ class G2SATPolicy:
         if allow_overlaps is None:
             allow_overlaps = self.allow_overlaps
 
-        g = SATGraph.from_template(
-            template,
-            allow_overlaps=allow_overlaps,
-            seed=seed,
-        )
+        if isinstance(template, SATGraph):
+            g = template
+        elif isinstance(template, list):
+            g = SATGraph.from_clauses(
+                template,
+                allow_overlaps=allow_overlaps,
+                seed=seed,
+            )
+        else:
+            g = SATGraph.from_template(
+                template,
+                allow_overlaps=allow_overlaps,
+                seed=seed,
+            )
         while not g.is_3sat():
             pairs = g.sample_valid_merges(num_sampled_pairs)
             if not pairs:

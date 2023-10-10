@@ -15,9 +15,10 @@ if TYPE_CHECKING:
 class Args(argparse.Namespace):
     results_dir: Path
     output: str
+    checkpoints: list[int]
     num_vars: list[int]
     alphas: list[float]
-    checkpoints: list[int]
+    complexify: list[float]
     runs: int
     num_sampled_pairs: list[int]
     solvers: list[str]
@@ -25,7 +26,6 @@ class Args(argparse.Namespace):
     seed: int
     device: str | None
     force: bool
-
 
 def parse_args() -> Args:
     parser = argparse.ArgumentParser()
@@ -44,6 +44,7 @@ def parse_args() -> Args:
     parser.add_argument(
         "-a", "--alpha", type=float, action="append", dest="alphas", default=[]
     )
+    parser.add_argument("--complexify", type=float, action="append")
     parser.add_argument("--runs", type=int, default=100)
     parser.add_argument("--num_sampled_pairs", type=int, action="append")
     parser.add_argument("--solver", type=str, action="append", dest="solvers")
@@ -58,6 +59,8 @@ def parse_args() -> Args:
         args.num_vars = [100]
     if not args.alphas:
         args.alphas = [4.2]
+    if not args.solvers:
+        args.solvers = ["minisat22"]
 
     return args
 
@@ -75,11 +78,7 @@ def main():
     else:
         devices = [args.device]
 
-    solvers: list[Solver]
-    if args.solvers:
-        solvers = [PySAT(name) for name in args.solvers]
-    else:
-        solvers = [PySAT("m22")]
+    solvers: list["Solver"] = [PySAT(name) for name in args.solvers]
 
     for ckpt in args.checkpoints:
         model_path = args.results_dir / f"checkpoints/{ckpt}.pt"
@@ -96,6 +95,7 @@ def main():
                 solvers,
                 args.num_vars,
                 args.alphas,
+                args.complexify,
                 args.runs,
                 args.num_cpus,
                 args.seed,

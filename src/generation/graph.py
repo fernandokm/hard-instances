@@ -1,3 +1,4 @@
+import copy
 import itertools
 from collections.abc import Iterator
 from typing import Literal
@@ -262,7 +263,43 @@ class SATGraph:
         return f"SATGraph({node_type=}, {edge_index=}, {node_degree=})"
 
     @staticmethod
-    def from_template(template: npt.NDArray[np.int64], **kwargs) -> "SATGraph":
+    def from_clauses(clauses: list[list[int]], **kwargs) -> "SATGraph":
+        num_vars = max(abs(literal) for clause in clauses for literal in clause)
+        num_clauses = len(clauses)
+        num_clause_edges = sum(len(c) for c in clauses)
+
+        node_degree = np.zeros(2 * num_vars + num_clauses, dtype=np.int64)
+        edge_index = np.zeros((2, num_clause_edges), dtype=np.int64)
+        i = 0
+        for j, clause in enumerate(clauses):
+            for literal in clause:
+                if literal > 0:
+                    literal -= 1
+                else:
+                    literal = num_vars - (literal + 1)
+                clause_idx = j + 2 * num_vars
+                edge_index[:, i] = [literal, clause_idx]
+                node_degree[literal] += 1
+                node_degree[clause_idx] += 1
+                i += 1
+
+        pos_nodes = np.arange(num_vars)
+        neg_nodes = pos_nodes + num_vars
+        literal_edges = np.vstack([pos_nodes, neg_nodes])
+        edge_index = np.concatenate([literal_edges, edge_index], axis=1)
+
+        # node_type == 0 (positive literal), 1 (negative literal) or 2 (clause)
+        node_type = np.repeat(np.arange(3), [num_vars, num_vars, num_clauses])
+
+        return SATGraph(num_vars, node_type, edge_index, node_degree, **kwargs)
+
+    @staticmethod
+    def from_template(
+        template: npt.NDArray[np.int64],
+        sampling_method: SamplingMethod = "g2sat",
+        allow_overlaps: bool = False,
+        seed: Seed = None,
+    ) -> "SATGraph":
         num_literals = len(template)
         num_vars = num_literals // 2
         num_clauses = template.sum()
@@ -283,7 +320,15 @@ class SATGraph:
         # node_type == 0 (positive literal), 1 (negative literal) or 2 (clause)
         node_type = np.repeat(np.arange(3), [num_vars, num_vars, num_clauses])
 
-        return SATGraph(num_vars, node_type, edge_index, node_degree, **kwargs)
+        return SATGraph(
+            num_vars,
+            node_type,
+            edge_index,
+            node_degree,
+            sampling_method=sampling_method,
+            allow_overlaps=allow_overlaps,
+            seed=seed,
+        )
 
     @staticmethod
     def sample_template(
@@ -314,3 +359,49 @@ class SATGraph:
         assert template.shape[0] == num_literals
 
         return template
+
+
+class SplittableCNF:
+    def __init__(self, clauses: list[list[int]], seed: Seed = None) -> None:
+        self.unit_clauses: list[list[int]] = []
+        self.multi_clauses: list[list[int]] = []
+        self.rng = np.random.default_rng(seed)
+        if clauses:
+            for c in clauses:
+                self.append(c)
+
+    @property
+    def clauses(self) -> list[list[int]]:
+        return self.unit_clauses + self.multi_clauses
+
+    def append(self, clause: list[int]):
+        assert len(clause) > 0
+
+        if len(clause) == 1:
+            self.unit_clauses.append(clause)
+        else:
+            self.multi_clauses.append(clause)
+
+    def copy(self) -> "SplittableCNF":
+        f = SplittableCNF([])
+        f.unit_clauses = copy.deepcopy(self.unit_clauses)
+        f.multi_clauses = copy.deepcopy(self.multi_clauses)
+        return f
+
+    def can_split(self) -> bool:
+        return len(self.multi_clauses) > 0
+
+    def random_split(self) -> None:
+        if not self.can_split():
+            msg = "No clauses left to split"
+            raise RuntimeError(msg)
+
+        i = self.rng.integers(len(self.multi_clauses))
+        clause = self.multi_clauses.pop(i)
+
+        partition_point = self.rng.integers(1, len(clause))
+        self.append(clause[:partition_point])
+        self.append(clause[partition_point:])
+
+    def __repr__(self):
+        return f"SplittableCNF({self.clauses})"
