@@ -72,7 +72,7 @@ def _handle_eval_queue(
     policy = policies[worker_idx % len(policies)]
     while True:
         try:
-            num_vars, alpha, run, seed = in_queue.get_nowait()
+            num_vars, alpha, run, seed = in_queue.get(timeout=1.0)
         except queue.Empty:
             return
         instance = generate(policy, num_vars, alpha, seed=seed)
@@ -97,7 +97,7 @@ def _handle_complexify_queue(
     policy = policies[worker_idx % len(policies)]
     while True:
         try:
-            num_vars, alpha, percent_split, run, seed = in_queue.get_nowait()
+            num_vars, alpha, percent_split, run, seed = in_queue.get(timeout=1.0)
         except queue.Empty:
             return
         instance0, instance1 = complexify(
@@ -154,24 +154,35 @@ def generate_and_eval_par(
     out_queue = spawn_ctx.Queue()
     for t in tasks:
         in_queue.put_nowait(t)
+    in_queue.close()
 
     results = []
-    num_tasks = in_queue.qsize()
+    num_tasks = len(tasks)
     ctx = torch.multiprocessing.spawn(
         queue_handler,
         (policies, solvers, in_queue, out_queue),
         nprocs=num_cpus,
         join=False,
     )
-    in_queue.close()
+    assert ctx is not None
     pbar = tqdm(total=num_tasks * len(solvers), desc=desc, smoothing=0.005)
+    done = False
     while pbar.n < pbar.total:
-        r = out_queue.get()
+        done = ctx.join(0)
+        try:
+            r = out_queue.get(timeout=1.0)
+        except queue.Empty:
+            if done:
+                print("Warning: some results are missing")
+                break
+            # Periodically go back to the start of the loop to check for errors
+            # in the workers
+            continue
         results.append(r)
         pbar.update()
+
     pbar.close()
 
-    ctx.join()
     return pd.DataFrame(results).sort_values(sort_columns)
 
 
