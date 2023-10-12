@@ -24,7 +24,10 @@ class History:
     ) -> SATGraph:
         raw_template = self.episode.loc[(episode, eval_episode), "template"]
         template = utils.parse_template(raw_template)  # type: ignore
-        graph = SATGraph.from_template(template)
+        if isinstance(template, list):
+            graph = SATGraph.from_clauses(template)
+        else:
+            graph = SATGraph.from_template(template)
 
         actions = self.step.loc[
             (episode, eval_episode, slice(None)), ["action_0", "action_1"]

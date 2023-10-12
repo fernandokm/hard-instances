@@ -263,7 +263,12 @@ class SATGraph:
         return f"SATGraph({node_type=}, {edge_index=}, {node_degree=})"
 
     @staticmethod
-    def from_clauses(clauses: list[list[int]], **kwargs) -> "SATGraph":
+    def from_clauses(
+        clauses: list[list[int]],
+        sampling_method: SamplingMethod = "g2sat",
+        allow_overlaps: bool = False,
+        seed: Seed = None,
+    ) -> "SATGraph":
         num_vars = max(abs(literal) for clause in clauses for literal in clause)
         num_clauses = len(clauses)
         num_clause_edges = sum(len(c) for c in clauses)
@@ -291,7 +296,15 @@ class SATGraph:
         # node_type == 0 (positive literal), 1 (negative literal) or 2 (clause)
         node_type = np.repeat(np.arange(3), [num_vars, num_vars, num_clauses])
 
-        return SATGraph(num_vars, node_type, edge_index, node_degree, **kwargs)
+        return SATGraph(
+            num_vars,
+            node_type,
+            edge_index,
+            node_degree,
+            sampling_method=sampling_method,
+            allow_overlaps=allow_overlaps,
+            seed=seed,
+        )
 
     @staticmethod
     def from_template(

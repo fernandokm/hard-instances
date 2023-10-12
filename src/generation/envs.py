@@ -2,7 +2,7 @@ import itertools
 import sys
 import time
 from collections import defaultdict
-from typing import Any, TypedDict
+from typing import Any, Sequence, TypedDict
 
 import gymnasium as gym
 import numpy as np
@@ -33,7 +33,8 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         intermediate_rewards_coeff: float = 0.1,
         sampling_method: SamplingMethod = "g2sat",
         allow_overlaps: bool = False,
-        fixed_templates: list[npt.NDArray[np.int64]] | None = None,
+        fixed_templates: Sequence[npt.NDArray[np.int64] | list[list[int]]]
+        | None = None,
         solve_repetitions: int = 1,
         solve_agg: str = "mean",
         reference_instances: list[list[list[int]]] | None = None,
@@ -47,7 +48,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         self.compress_observations = compress_observations
         self.intermediate_rewards = intermediate_rewards
         self.intermediate_rewards_coeff = intermediate_rewards_coeff
-        self.sampling_method = sampling_method
+        self.sampling_method: SamplingMethod = sampling_method
         self.allow_overlaps = allow_overlaps
         self.solve_repetitions = solve_repetitions
         self.solve_agg = solve_agg
@@ -140,7 +141,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
 
     def reset(
         self,
-        template: npt.NDArray[np.int64] | None = None,
+        template: npt.NDArray[np.int64] | list[list[int]] | None = None,
         seed: Seed = None,
     ) -> tuple[G2SATObservation, dict[str, Any]]:
         rng = np.random.default_rng(seed)
@@ -156,12 +157,20 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
                 self.num_vars, self.num_clauses * 3, seed=rng
             )
 
-        self.graph = SATGraph.from_template(
-            template,
-            sampling_method=self.sampling_method,
-            allow_overlaps=self.allow_overlaps,
-            seed=rng,
-        )
+        if isinstance(template, list):
+            self.graph = SATGraph.from_clauses(
+                template,
+                sampling_method=self.sampling_method,
+                allow_overlaps=self.allow_overlaps,
+                seed=rng,
+            )
+        else:
+            self.graph = SATGraph.from_template(
+                template,
+                sampling_method=self.sampling_method,
+                allow_overlaps=self.allow_overlaps,
+                seed=rng,
+            )
         obs, sample_time = self.get_obs()
         self.valid_actions = obs["valid_actions"]
 

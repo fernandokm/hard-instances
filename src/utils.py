@@ -60,8 +60,13 @@ class RngFactory:
         return np.random.default_rng(seed)
 
 
-def parse_template(raw_template: str) -> npt.NDArray[np.int64]:
-    return np.asarray(json.loads(raw_template), dtype=np.int64)
+def parse_template(raw_template: str) -> npt.NDArray[np.int64] | list[list[int]]:
+    data = json.loads(raw_template)
+    if data and isinstance(data[0], list):
+        # clauses format (list[list[int]])
+        return data
+    # template format
+    return np.asarray(data, dtype=np.int64)
 
 
 def _open_and_decompress(file: Path) -> TextIO:
@@ -71,7 +76,7 @@ def _open_and_decompress(file: Path) -> TextIO:
         return file.open("r")
 
 
-def parse_template_file(file: Path) -> list[npt.NDArray[np.int64]]:
+def parse_template_file(file: Path) -> list[npt.NDArray[np.int64] | list[list[int]]]:
     templates = []
     with _open_and_decompress(file) as f:
         for line in f:
