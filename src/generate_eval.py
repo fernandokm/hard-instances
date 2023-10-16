@@ -23,6 +23,7 @@ class Args(argparse.Namespace):
     num_sampled_pairs: list[int]
     solvers: list[str]
     num_cpus: int
+    save_instances: bool
     seed: int
     device: str | None
     force: bool
@@ -49,6 +50,7 @@ def parse_args() -> Args:
     parser.add_argument("--num_sampled_pairs", type=int, action="append")
     parser.add_argument("--solver", type=str, action="append", dest="solvers")
     parser.add_argument("--num_cpus", type=int, default=1)
+    parser.add_argument("--save_instances", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("-f", "--force", action="store_true")
@@ -98,6 +100,7 @@ def main():
                 args.complexify,
                 args.runs,
                 args.num_cpus,
+                args.save_instances,
                 args.seed,
                 desc=f"checkpoint={ckpt}, num_sampled_pairs={n}",
             )

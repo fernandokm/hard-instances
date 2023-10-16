@@ -68,6 +68,7 @@ def _handle_eval_queue(
     solvers: list[Solver],
     in_queue: torch.multiprocessing.Queue,
     out_queue: torch.multiprocessing.Queue,
+    save_instances: bool = False,
 ) -> None:
     policy = policies[worker_idx % len(policies)]
     while True:
@@ -84,6 +85,8 @@ def _handle_eval_queue(
             r["solver"] = solver.name
             r["num_sampled_pairs"] = policy.num_sampled_pairs
             r["run"] = run
+            if save_instances:
+                r["clauses"] = clauses
             out_queue.put(r)
 
 
@@ -93,6 +96,7 @@ def _handle_complexify_queue(
     solvers: list[Solver],
     in_queue: torch.multiprocessing.Queue,
     out_queue: torch.multiprocessing.Queue,
+    save_instances: bool = False,
 ) -> None:
     policy = policies[worker_idx % len(policies)]
     while True:
@@ -115,6 +119,9 @@ def _handle_complexify_queue(
             r["solver"] = solver.name
             r["num_sampled_pairs"] = policy.num_sampled_pairs
             r["run"] = run
+            if save_instances:
+                r["clauses"] = clauses1
+                r["clauses/original"] = clauses0
             out_queue.put(r)
 
 
@@ -126,6 +133,7 @@ def generate_and_eval_par(
     percent_split: list[float],
     runs: int,
     num_cpus: int = 1,
+    save_instances: bool = False,
     seed: utils.Seed = None,
     desc="generating and solving instances",
 ) -> pd.DataFrame:
@@ -153,14 +161,13 @@ def generate_and_eval_par(
     in_queue = spawn_ctx.Queue()
     out_queue = spawn_ctx.Queue()
     for t in tasks:
-        in_queue.put_nowait(t)
-    in_queue.close()
+        in_queue.put(t)
 
     results = []
     num_tasks = len(tasks)
     ctx = torch.multiprocessing.spawn(
         queue_handler,
-        (policies, solvers, in_queue, out_queue),
+        (policies, solvers, in_queue, out_queue, save_instances),
         nprocs=num_cpus,
         join=False,
     )
@@ -181,6 +188,8 @@ def generate_and_eval_par(
         results.append(r)
         pbar.update()
 
+    ctx.join()
+    in_queue.close()
     pbar.close()
 
     return pd.DataFrame(results).sort_values(sort_columns)
