@@ -1,8 +1,7 @@
-numpy
+numpy<2.0
 matplotlib
 tqdm
 scipy
-pyscipopt
 torch
 seaborn
 python-sat[aiger,approxmc,pblib]
