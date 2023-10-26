@@ -347,26 +347,31 @@ class SATGraph:
     def sample_template(
         num_vars: int,
         num_clauses: int,
+        multinomial: bool = False,
         seed: Seed = None,
     ) -> npt.NDArray[np.int64]:
         assert num_vars * 2 <= num_clauses
-
-        # To generate a template, we consider an array of clauses,
-        # each with a single literal. We sort the literals:
-        #   c = [l0, l0, l1, l1, l1, l2, ...]
-        #                ^i=2        ^i=5
-        # and obtain the (num_literals-1) indices where the literal changes
-        # (2, 5, ... in the example above).
-        # We then compute the number of occurrences of each literal
-        # (2-0, 5-2, ... in the example above)
         rng = np.random.default_rng(seed)
         num_literals = num_vars * 2
-        partition_points = 1 + rng.choice(
-            num_clauses - 1, size=num_literals - 1, replace=False
-        )
-        partition_points.sort()
 
-        template = np.diff(partition_points, prepend=0, append=num_clauses)
+        if multinomial:
+            uniform_dist = np.ones(num_literals) / num_literals
+            template = rng.multinomial(num_clauses, uniform_dist).ravel()
+        else:
+            # To generate a template, we consider an array of clauses,
+            # each with a single literal. We sort the literals:
+            #   c = [l0, l0, l1, l1, l1, l2, ...]
+            #                ^i=2        ^i=5
+            # and obtain the (num_literals-1) indices where the literal changes
+            # (2, 5, ... in the example above).
+            # We then compute the number of occurrences of each literal
+            # (2-0, 5-2, ... in the example above)
+            partition_points = 1 + rng.choice(
+                num_clauses - 1, size=num_literals - 1, replace=False
+            )
+            partition_points.sort()
+
+            template = np.diff(partition_points, prepend=0, append=num_clauses)
 
         assert template.sum() == num_clauses
         assert template.shape[0] == num_literals

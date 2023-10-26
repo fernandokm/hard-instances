@@ -24,6 +24,7 @@ class Args(argparse.Namespace):
     solvers: list[str]
     num_cpus: int
     save_instances: bool
+    multinomial_templates: bool
     seed: int
     device: str | None
     force: bool
@@ -51,6 +52,7 @@ def parse_args() -> Args:
     parser.add_argument("--solver", type=str, action="append", dest="solvers")
     parser.add_argument("--num_cpus", type=int, default=1)
     parser.add_argument("--save_instances", action="store_true")
+    parser.add_argument("--multinomial_templates", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("-f", "--force", action="store_true")
@@ -101,6 +103,7 @@ def main():
                 args.runs,
                 args.num_cpus,
                 args.save_instances,
+                args.multinomial_templates,
                 args.seed,
                 desc=f"checkpoint={ckpt}, num_sampled_pairs={n}",
             )

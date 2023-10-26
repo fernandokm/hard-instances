@@ -19,6 +19,7 @@ class Args(argparse.Namespace):
     seed: int
     complexify_min: float | None
     complexify_max: float | None
+    multinomial: bool
 
 
 def parse_args() -> Args:
@@ -30,6 +31,7 @@ def parse_args() -> Args:
     parser.add_argument("--num_templates", default=50000, type=int)
     parser.add_argument("--complexify_min", type=float, default=None)
     parser.add_argument("--complexify_max", type=float, default=None)
+    parser.add_argument("--multinomial", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(namespace=Args())
     return args
@@ -41,15 +43,18 @@ def main():
 
     if args.complexify_min is None and args.complexify_max is None:
         complexify = None
-        complexify_str = ""
+        note = ""
     else:
         cmin = 0.0 if args.complexify_min is None else args.complexify_min
         cmax = 1.0 if args.complexify_max is None else args.complexify_max
         complexify = (cmin, cmax)
-        complexify_str = f"({cmin},{cmax})"
+        note = f"({cmin},{cmax})"
+
+    if complexify is None and args.multinomial:
+        note = "(multinomial)"
 
     filename = (
-        f"{args.num_vars}x{args.num_clauses}x{args.k}{complexify_str}_"
+        f"{args.num_vars}x{args.num_clauses}x{args.k}{note}_"
         f"{args.num_templates}_seed{args.seed}.txt.gz"
     )
     out_file = args.out_dir / filename
@@ -59,7 +64,10 @@ def main():
         for _ in trange(args.num_templates, unit="templates"):
             if complexify is None:
                 t = SATGraph.sample_template(
-                    args.num_vars, args.num_clauses * args.k, seed=rng
+                    args.num_vars,
+                    args.num_clauses * args.k,
+                    multinomial=args.multinomial,
+                    seed=rng,
                 )
                 print(t.tolist(), file=f)
             else:

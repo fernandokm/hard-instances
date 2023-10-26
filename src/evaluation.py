@@ -37,9 +37,18 @@ def load_policy(path: str, device: str | None = None) -> G2SATPolicy:
 
 
 def generate(
-    policy: G2SATPolicy, num_vars: int, alpha: float, seed: utils.Seed = None
+    policy: G2SATPolicy,
+    num_vars: int,
+    alpha: float,
+    multinomial_templates: bool = False,
+    seed: utils.Seed = None,
 ) -> SATGraph:
-    template = SATGraph.sample_template(num_vars, int(num_vars * 3 * alpha), seed=seed)
+    template = SATGraph.sample_template(
+        num_vars,
+        int(num_vars * 3 * alpha),
+        multinomial=multinomial_templates,
+        seed=seed,
+    )
     instance = policy.generate(template, seed=seed)
     return instance
 
@@ -69,6 +78,7 @@ def _handle_eval_queue(
     in_queue: torch.multiprocessing.Queue,
     out_queue: torch.multiprocessing.Queue,
     save_instances: bool = False,
+    multinomial_templates: bool = False,
 ) -> None:
     policy = policies[worker_idx % len(policies)]
     while True:
@@ -76,7 +86,7 @@ def _handle_eval_queue(
             num_vars, alpha, run, seed = in_queue.get(timeout=1.0)
         except queue.Empty:
             return
-        instance = generate(policy, num_vars, alpha, seed=seed)
+        instance = generate(policy, num_vars, alpha, multinomial_templates, seed=seed)
         clauses = instance.to_clauses()
         for solver in solvers:
             r = solver.solve_instance(clauses)
@@ -97,6 +107,7 @@ def _handle_complexify_queue(
     in_queue: torch.multiprocessing.Queue,
     out_queue: torch.multiprocessing.Queue,
     save_instances: bool = False,
+    multinomial_templates: bool = False,  # ignored, complexify is always multinomial (from k-sat)
 ) -> None:
     policy = policies[worker_idx % len(policies)]
     while True:
@@ -134,6 +145,7 @@ def generate_and_eval_par(
     runs: int,
     num_cpus: int = 1,
     save_instances: bool = False,
+    multinomial_templates: bool = False,
     seed: utils.Seed = None,
     desc="generating and solving instances",
 ) -> pd.DataFrame:
@@ -167,7 +179,7 @@ def generate_and_eval_par(
     num_tasks = len(tasks)
     ctx = torch.multiprocessing.spawn(
         queue_handler,
-        (policies, solvers, in_queue, out_queue, save_instances),
+        (policies, solvers, in_queue, out_queue, save_instances, multinomial_templates),
         nprocs=num_cpus,
         join=False,
     )
