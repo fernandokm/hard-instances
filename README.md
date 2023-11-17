@@ -33,13 +33,13 @@ This repository contains the work developed during an internship at the [LAMSADE
   git clone https://github.com/fernandokm/hard-instances
   ```
 
-1. Navigate to the project directory:
+2. Navigate to the project directory:
 
   ```sh
   cd hard-instances
   ```
 
-1. Install dependencies:
+3. Install dependencies:
 
    - The main dependencies are listed in the [requirements.txt](requirements.txt). Additional dependencies required to run jupyter notebooks and linters/formatters are given in [requirements-dev.txt](requirements-dev.txt).
 
@@ -86,7 +86,7 @@ The following are the main scripts provided:
 
      The templates will be saved to `50x210x3(multinomial)_32000_seed0.txt`, `50x210x3(multinomial)_32000_seed100.txt` and `100x420x3(multinomial)_32000_seed100.txt`.
 
-1. **Train the model**. A gpu is automatically used if available. To use a specific device, pass the flag `--gpu_device='cuda:N'`.
+2. **Train the model**. A gpu is automatically used if available. To use a specific device, pass the flag `--gpu_device='cuda:N'`.
 
      ```sh
      python src/train_g2sat.py \
@@ -106,7 +106,7 @@ The following are the main scripts provided:
          --seed=0
      ```
 
-1. **Evaluate the model**. The flags `--num_cpus` and `--device` should be updated to match your machine.
+2. **Evaluate the model**. The flags `--num_cpus` and `--device` should be updated to match your machine.
 
    - For the task of instance generation:
 
@@ -160,7 +160,7 @@ In order to train the model for instance augmentation, steps 1 and 2 above shoul
      python src/generate_templates.py --num_vars=100 --num_clauses=420 --num_templates=32000--complexify_min=0 --complexify_max=0.25 --seed=100
      ```
 
-1. **Train the model**. Change the file names:
+2. **Train the model**. Change the file names:
 
      ```sh
      python src/train_g2sat.py \
@@ -180,7 +180,7 @@ In order to train the model for instance augmentation, steps 1 and 2 above shoul
          --seed=0
      ```
 
-1. **Evaluate the model**. No changes.
+3. **Evaluate the model**. No changes.
 
 [lamsade]: https://www.lamsade.dauphine.fr/en.html
 [cs]: https://www.centralesupelec.fr/en
