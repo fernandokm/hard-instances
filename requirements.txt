@@ -11,3 +11,4 @@ gymnasium
 networkx
 tensorboard
 tensorboardx
+rich-argparse

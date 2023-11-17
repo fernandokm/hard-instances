@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import utils
 from generation.graph import SATGraph, SplittableCNF
+from rich_argparse import RichHelpFormatter
 from tqdm.auto import trange
 
 
@@ -23,16 +24,119 @@ class Args(argparse.Namespace):
 
 
 def parse_args() -> Args:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out_dir", default="templates", type=Path)
-    parser.add_argument("--num_vars", default=100, type=int)
-    parser.add_argument("--num_clauses", default=420, type=int)
-    parser.add_argument("--k", default=3, type=int)
-    parser.add_argument("--num_templates", default=50000, type=int)
-    parser.add_argument("--complexify_min", type=float, default=None)
-    parser.add_argument("--complexify_max", type=float, default=None)
-    parser.add_argument("--multinomial", action="store_true")
-    parser.add_argument("--seed", type=int, default=0)
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generates templates and/or partial instances which can be used train "
+            "a G2SAT model for the generation of hard 3-SAT instances "
+            "(see the documentation of train_g2sat.py for more information)"
+        ),
+        formatter_class=lambda *args, **kwargs: RichHelpFormatter(
+            *args, **kwargs, max_help_position=28, width=90
+        ),
+        add_help=False,
+    )
+    group = parser.add_argument_group("Main options")
+    group.add_argument(
+        "--out_dir",
+        default="templates",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "directory in which the template file should be saved "
+            "\\[default: templates]"
+        ),
+    )
+    group.add_argument(
+        "--num_vars",
+        type=int,
+        default=100,
+        metavar="INT",
+        help=(
+            "number of variables in the generated instances "
+            "(i.e. after the templates are merged) \\[default: 100]"
+        ),
+    )
+    group.add_argument(
+        "--num_clauses",
+        type=int,
+        default=420,
+        metavar="INT",
+        help=(
+            "number of clauses in the generated instances "
+            "(i.e. after the templates are merged) \\[default: 100]"
+        ),
+    )
+    group.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        metavar="INT",
+        help=(
+            "number of literals in each clause in the generated instances "
+            "(i.e. after the templates are merged) \\[default: 3]"
+        ),
+    )
+    group.add_argument(
+        "--num_templates",
+        type=int,
+        default=50000,
+        metavar="INT",
+        help="number of templates to generate \\[default: 50_000]",
+    )
+    group.add_argument(
+        "--multinomial",
+        action="store_true",
+        help=(
+            "sample the templates from a multinomial distribution instead of a "
+            "triangular distribution"
+        ),
+    )
+    group.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        metavar="INT",
+        help="seed for all random number generators \\[default: 0]",
+    )
+    group.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="show this help message and exit",
+    )
+
+    group = parser.add_argument_group(
+        title="Instance augmentation",
+        description=(
+            "By default this script generates random templates for the task of "
+            "instance generation. However, if either of the flags --complexify_min or "
+            "--complexify_max are specified, this script switchs to generating partial "
+            "instances, for the task of instance augmentation/complexification. "
+            "To this, a set of random k-sat instances is generated. For each "
+            "instance, a random number of splits is performed. The percentage of "
+            "splits performed in each instance, relative the the maximum number "
+            "of splits possible, is sampled from the interval \\[complexify_min, "
+            "complexify_max]."
+        ),
+    )
+    group.add_argument(
+        "--complexify_min",
+        type=float,
+        default=None,
+        help=(
+            "Perform instance augmentation and ensure that the fraction of splits "
+            "performed is at least --complexify_min \\[default: 0.0]"
+        ),
+    )
+    group.add_argument(
+        "--complexify_max",
+        type=float,
+        default=None,
+        help=(
+            "Perform instance augmentation and ensure that the fraction of splits "
+            "performed is at least --complexify_max \\[default: 1.0]"
+        ),
+    )
     args = parser.parse_args(namespace=Args())
     return args
 

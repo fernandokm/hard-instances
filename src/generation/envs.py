@@ -2,7 +2,8 @@ import itertools
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Sequence, TypedDict
+from collections.abc import Sequence
+from typing import Any, TypedDict
 
 import gymnasium as gym
 import numpy as np
@@ -61,7 +62,7 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
         else:
             self.fixed_templates_iter = iter(itertools.cycle(fixed_templates))
 
-        max_num_nodes = num_vars * 2 + num_clauses * 3
+        max_num_nodes = self._compute_max_node_count()
         self.observation_space = spaces.Dict(
             {
                 "graph": spaces.Graph(
@@ -74,6 +75,25 @@ class G2SATEnv(gym.Env[dict, npt.NDArray[np.integer]]):
             }
         )
         self.action_space = spaces.MultiDiscrete([max_num_nodes, max_num_nodes])
+
+    def _compute_max_node_count(self) -> int:
+        max_num_nodes = self.num_vars * 2 + self.num_clauses * 3
+        if self.fixed_templates is None:
+            return max_num_nodes
+
+        for template in self.fixed_templates:
+            if isinstance(template, list):
+                num_vars = max(
+                    abs(literal) for clause in template for literal in clause
+                )
+                num_literals = 2 * num_vars
+                num_clauses = sum(len(clause) for clause in template)
+            else:
+                num_literals = len(template)
+                num_clauses = template.sum()
+            num_nodes = num_literals + num_clauses
+            max_num_nodes = max(max_num_nodes, num_nodes)
+        return max_num_nodes
 
     def step(
         self,

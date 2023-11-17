@@ -107,7 +107,9 @@ def _handle_complexify_queue(
     in_queue: torch.multiprocessing.Queue,
     out_queue: torch.multiprocessing.Queue,
     save_instances: bool = False,
-    multinomial_templates: bool = False,  # ignored, complexify is always multinomial (from k-sat)
+    # multinomial_templates is ignored, complexify is always multinomial
+    # since we are starting from k-sat
+    multinomial_templates: bool = False,
 ) -> None:
     policy = policies[worker_idx % len(policies)]
     while True:

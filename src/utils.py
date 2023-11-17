@@ -19,6 +19,9 @@ class Tee:
         self.dst1 = dst1
         self.dst2 = dst2
 
+    def isatty(self) -> bool:
+        return self.dst1.isatty()
+
     def write(self, data):
         self.dst1.write(data)
         self.dst2.write(data)

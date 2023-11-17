@@ -17,6 +17,7 @@ gymnasium = "*"
 networkx = "*"
 tensorboard = "*"
 tensorboardx = "*"
+rich-argparse = "*"
 
 [dev-packages]
 ipykernel = "*"

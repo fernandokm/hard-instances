@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import evaluation
 import pandas as pd
+from rich_argparse import RichHelpFormatter
 from solvers.pysat import PySAT
 
 if TYPE_CHECKING:
@@ -29,11 +30,31 @@ class Args(argparse.Namespace):
     device: str | None
     force: bool
 
+
 def parse_args() -> Args:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("results_dir", type=Path)
-    parser.add_argument("-o", "--output", type=str, default="eval.parquet")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(
+        description=(
+            "Evaluates a G2SAT model adapted for the generation of hard 3-SAT instances"
+        ),
+        formatter_class=lambda *args, **kwargs: RichHelpFormatter(
+            *args, **kwargs, max_help_position=28, width=90
+        ),
+        add_help=False,
+    )
+
+    ############
+    # REQUIRED #
+    ############
+    group = parser.add_argument_group("Required arguments")
+    group.add_argument(
+        "results_dir",
+        type=Path,
+        help=(
+            "the directory with the training results, "
+            "e.g., runs/SAGE/1970-01-01T00:00:00"
+        ),
+    )
+    group.add_argument(
         "-c",
         "--checkpoint",
         type=int,
@@ -41,21 +62,170 @@ def parse_args() -> Args:
         dest="checkpoints",
         required=True,
         default=[],
+        metavar="INT",
+        help=("checkpoint at which to evaluate the model \\[repeatable]"),
     )
-    parser.add_argument("-n", "--num_vars", type=int, action="append", default=[])
-    parser.add_argument(
-        "-a", "--alpha", type=float, action="append", dest="alphas", default=[]
+
+    #####################
+    # INFERENCE OPTIONS #
+    #####################
+    group = parser.add_argument_group(
+        title="Inference options",
+        description=(
+            "Options marked as repeatable may be specified multiple times and "
+            "will cause the evaluation to be executed once for each specified value. "
+            "For repeatable options, the default value applies only if no value is "
+            "provided."
+        ),
     )
-    parser.add_argument("--complexify", type=float, action="append")
-    parser.add_argument("--runs", type=int, default=100)
-    parser.add_argument("--num_sampled_pairs", type=int, action="append")
-    parser.add_argument("--solver", type=str, action="append", dest="solvers")
-    parser.add_argument("--num_cpus", type=int, default=1)
-    parser.add_argument("--save_instances", action="store_true")
-    parser.add_argument("--multinomial_templates", action="store_true")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--device", type=str, default=None)
-    parser.add_argument("-f", "--force", action="store_true")
+    group.add_argument(
+        "-n",
+        "--num_vars",
+        type=int,
+        action="append",
+        default=[],
+        metavar="INT",
+        help=(
+            "number of variables in the evaluation instances "
+            "\\[repeatable, default: 100]"
+        ),
+    )
+    group.add_argument(
+        "-a",
+        "--alpha",
+        type=float,
+        action="append",
+        dest="alphas",
+        default=[],
+        metavar="FLOAT",
+        help=(
+            "ratio of clauses to variables in the evaluation instances "
+            "\\[repeatable, default: 4.2]"
+        ),
+    )
+    group.add_argument(
+        "--complexify",
+        type=float,
+        action="append",
+        help=(
+            "instead of generating new instances from templates, augment random k-sat "
+            "instances; the value specified corresponds to the percentage of splits "
+            "which should be performed \\[repeatable, default: do not complexify]"
+        ),
+    )
+    group.add_argument(
+        "--num_sampled_pairs",
+        type=int,
+        action="append",
+        metavar="INT",
+        help=(
+            "number of clause pairs sampled by the oracle "
+            "\\[repeatable, default: the same value used during training]"
+        ),
+    )
+    group.add_argument(
+        "--multinomial_templates",
+        action="store_true",
+        help=(
+            "sample the templates from a multinomial distribution instead of a "
+            "triangular distribution"
+        ),
+    )
+
+    ################
+    # EVAL OPTIONS #
+    ################
+    group = parser.add_argument_group(
+        title="Evaluation options",
+    )
+
+    group.add_argument(
+        "--runs",
+        type=int,
+        default=100,
+        metavar="INT",
+        help=(
+            "how many instances to generate and evaluate; if any of the "
+            "repeatable parameters are specified, this is the number of "
+            "instances generated for each combination of the repeatable "
+            "parameters \\[default: 100]"
+        ),
+    )
+    group.add_argument(
+        "--solver",
+        type=str,
+        action="append",
+        dest="solvers",
+        metavar="SOLVER",
+        help=(
+            "which solver to use; can be any solver accepted by PySAT "
+            "(see `pysat.solvers.SolverNames` for a full list of accepted "
+            "solver names) \\[repeatable, default: minisat22]"
+        ),
+    )
+
+    #################
+    # OTHER OPTIONS #
+    #################
+    group = parser.add_argument_group(
+        title="Other options",
+    )
+
+    group.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="eval.parquet",
+        metavar="STR",
+        help=(
+            "name of the output file, which will be saved in the results_dir "
+            "\\[default: eval.parquet]"
+        ),
+    )
+    group.add_argument(
+        "--num_cpus",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="number of evaluation processes to run in parallel [default: 1]",
+    )
+    group.add_argument(
+        "--save_instances",
+        action="store_true",
+        help=(
+            "save the generated instances in the output file; in augmentation mode, "
+            "also save the original instances"
+        ),
+    )
+    group.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        metavar="INT",
+        help="seed for all random number generators \\[default: 0]",
+    )
+    group.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        metavar="DEVICE",
+        help=(
+            "device in which to run the neural network model "
+            "\\[default: the same device used during training]"
+        ),
+    )
+    group.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="overwrite output files",
+    )
+    group.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="show this help message and exit",
+    )
 
     args = parser.parse_args(namespace=Args())
 

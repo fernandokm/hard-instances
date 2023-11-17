@@ -9,6 +9,7 @@ from types import TracebackType
 
 import pandas as pd
 from history import History
+from rich_argparse import RichHelpFormatter
 from solvers.pysat import PySAT
 from tqdm.auto import tqdm
 
@@ -26,16 +27,124 @@ class Args(argparse.Namespace):
 
 
 def parse_args() -> Args:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("results_dir", type=Path)
-    parser.add_argument("-o", "--output", type=str, default="rerun.parquet")
-    parser.add_argument("--num_cpus", type=int, default=1)
-    parser.add_argument("--num_repetitions", type=int, default=1000)
-    parser.add_argument("--solver", type=str, default="minisat22")
-    parser.add_argument("--noise_start", type=float, default=1)
-    parser.add_argument("--noise_end", type=float, default=0)
-    parser.add_argument("--noise_cpus", type=int, default=1)
-    parser.add_argument("-f", "--force", action="store_true")
+    RichHelpFormatter.highlights.append(r"(?P<args>results_dir)")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Recomputes the training metrics for a model. This makes it possible "
+            "to recompute the cpu_time metric on a quieter CPU, with less noise "
+            "than during training. This script also supports the intentional addition "
+            "of a CPU load during the process for analysis purposes."
+        ),
+        formatter_class=lambda *args, **kwargs: RichHelpFormatter(
+            *args, **kwargs, max_help_position=28, width=90
+        ),
+        add_help=False,
+    )
+
+    group = parser.add_argument_group("Main options")
+    group.add_argument(
+        "results_dir",
+        type=Path,
+        help=(
+            "the directory with the training results, "
+            "e.g., runs/SAGE/1970-01-01T00:00:00"
+        ),
+    )
+    group.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="rerun.parquet",
+        metavar="STR",
+        help=(
+            "name of the output file, which will be saved in the results_dir "
+            "\\[default: rerun.parquet]"
+        ),
+    )
+    group.add_argument(
+        "--num_cpus",
+        type=int,
+        default=1,
+        metavar="INT",
+        help=(
+            "number of solver processes to run in parallel; each solver process "
+            "solves a different instance \\[default: 1]"
+        ),
+    )
+    group.add_argument(
+        "--num_repetitions",
+        type=int,
+        default=1000,
+        metavar="INT",
+        help="how many times to solve each instance \\[default: 1000]",
+    )
+    group.add_argument(
+        "--solver",
+        type=str,
+        default="minisat22",
+        metavar="SOLVER",
+        help=(
+            "which solver to use; can be any solver accepted by PySAT "
+            "(see `pysat.solvers.SolverNames` for a full list of accepted "
+            "solver names) \\[default: minisat22]"
+        ),
+    )
+    group.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="overwrite output files",
+    )
+    group.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="show this help message and exit",
+    )
+
+    ##################
+    # NOISE OPTIONS #
+    ##################
+    group = parser.add_argument_group(
+        title="Noise",
+        description=(
+            "This script can simulate the effects of other processes during training. "
+            "To do this, the instances generated during training are re-evaluated "
+            "in the same order as during training (some variations are possible due to "
+            "parallelism), and a CPU load is introduced. The load consists of a "
+            "configurable number of processes, each of which consumes 100% CPU "
+            "(spin loop)."
+        ),
+    )
+    group.add_argument(
+        "--noise_start",
+        type=float,
+        default=1,
+        metavar="FLOAT",
+        help=(
+            "approximate episode at which to start the CPU load, re-scaled to the "
+            "interval \\[0, 1] \\[default: 1.0]"
+        ),
+    )
+    group.add_argument(
+        "--noise_end",
+        type=float,
+        default=0,
+        metavar="FLOAT",
+        help=(
+            "approximate episode at which to end the CPU load, re-scaled to the "
+            "interval \\[0, 1] \\[default: 0.0]"
+        ),
+    )
+    group.add_argument(
+        "--noise_cpus",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="how many CPUs should be used \\[default: 1]",
+    )
+
+    # TODO: add groups?
 
     args = parser.parse_args(namespace=Args())
     return args
